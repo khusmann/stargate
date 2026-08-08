@@ -57,14 +57,34 @@ cross-section confirms the strip is 12 px wide; the alternative column-split rea
 gives 96 x 24 blocks at only 4:1, which is not strip-shaped and would cut ports in
 half.
 
-**Consequence for content.** Anything drawn across the full 24 rows is **bisected by
-the ceiling gap** — top 12 rows on one side of the corridor, bottom 12 on the other. A
-faithful preview needs a gutter between rows 11 and 12. This is why
-`Warp Tunnel Images/` ships every chevron in both normal and `(rev)` form: the two
-strips need content mirrored about the corridor axis to read symmetrically from below.
+**Consequence for content.** The strips face each other across the room, so anything
+drawn across the full 24 rows is never seen as one image — a shape across rows 10–13 has
+its halves on opposite walls. A faithful preview draws the two bands well apart.
 
 Note the 36-unit gap is a *token* separator, not a measurement — 1.5x pixel pitch,
 where a real corridor is tens of pitches wide. It marks the seam; it does not size it.
+
+### The two runs are antiparallel
+
+`Warp Tunnel.sho` drives its 8 chevrons as paired `Image Scroll` effects, identical in
+timing, opposite in everything else:
+
+| | Right (gid 2596, rows 0–11) | Left (gid 5001, rows 12–23) |
+|---|---|---|
+| Art | `N Chevron.png` | `N Chevron (rev).png` |
+| Scroll x | 191 → −191 (decreasing) | −167 → 215 (increasing) |
+| Effects | `Rotate 1`–`8` | `Rotate 1R`–`8R` |
+
+`(rev)` is a **horizontal** mirror — confirmed by diffing the PNGs; the art is
+vertically symmetric, so a vertical flip would be a no-op. The strips therefore scroll in
+opposite *canvas* directions while moving the same direction in the *room*, which means
+the two runs are addressed from opposite ends of the corridor.
+
+So `(rev)` is compensation for backwards wiring, not corridor-axis symmetry. The old
+pipeline paid for that by hand, in mirrored assets and per-effect reversed scrolls.
+
+The chevron art is 52 x 24 and both groups draw it at `starty` 12 — one full-height shape
+that each 12-row group clips in half, putting `\` on one wall and `/` on the other.
 
 ---
 
@@ -271,18 +291,19 @@ Python handles it directly with `open(path, encoding='utf-16-le')` — strip the
 format. The whole pipeline depends on import being faithful. Test by hand-editing one
 value in `PacMan.sho` and loading it.
 
-**2. Does `Animation` map pixels 1:1 at `scale` 1 with `smooth` 0?** Every existing
-animation is upscaled with `smooth` 1, so the LSM is demonstrably resampling in the
-only known-good case. Confirm that native-resolution frames pass through untouched.
+**2. Does `Animation` map pixels 1:1 at `scale` 1 with `smooth` 0?** In the only
+known-good case the LSM is doing a **~20x downscale** internally — `PacMan.sho` points at
+1910 x 470 frames with `smooth` 1 against a 96 x 24 target region. Native-resolution
+passthrough has never been observed here. Confirm it.
 
-**3. Strip orientation.** The map records which *rows* belong to which strip, but not
-which strip is physically which side of the corridor, nor whether either run is
-mounted reversed end-to-end. Light one module at a time to establish orientation
-before trusting the canvas as WYSIWYG.
+**3. Absolute strip orientation.** *Partly resolved* — the two runs are antiparallel
+(above). What remains is absolute: which physical wall is the Right strip, and which end
+of the corridor is column 0. Both are global one-parameter flips you would spot in the
+first second of playback. Light one module at a time to settle them.
 
-**4. Physical gap width.** The 36-unit row pitch between rows 11 and 12 marks the seam
-but does not measure it. The preview gutter needs a real number — measure in the room,
-or recover it from `Concept/Module Diagram.xlsx`.
+**4. ~~Physical gap width.~~** No longer load-bearing. The preview draws a fixed visual
+separator rather than a scaled gap, since the strips are on opposite walls and no width
+is "correct."
 
 ### Archived
 

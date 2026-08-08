@@ -45,13 +45,16 @@ off one source video, and:
 
 - the folder names are wrong — the dir labeled `10x` holds 4x frames, the dir labeled
   `3x` holds 10x frames
-- every master is 4.06:1 (191x47 and multiples) against a wall that is 8:1, so all 937
-  frames are squashed ~2x vertically
 - one dir has 936 frames where the others have 937
+- every master is **191 x 47**, where the target region wants an exact multiple. PacMan
+  targets `gid` 2410 = `Front (center)` = 96 x 24, so the master should have been
+  192 x 48. Off by one pixel in each axis, so every render was a fractional downscale —
+  and the LSM then did the final ~20x reduction itself with `smooth` 1.
 
-That set was four attempts to fix a geometry bug with a sharpness slider. A `saturation`
-knob would have automated the mistake. Rejecting wrong input and *showing* the result is
-the fix.
+Nobody could tell which directory was which, and the one quality problem they were
+chasing with sharpness settings was an off-by-one in the master. Requiring native size
+makes the resampling question disappear instead of giving people knobs to tune it with.
+Resizing belongs in the editor that produced the frames.
 
 Consequences: no `ffmpeg` dependency (the one thing a non-programmer would have had to
 install and put on `PATH`), and no `golang.org/x/image/draw` either, since nothing ever
@@ -297,19 +300,61 @@ is import-only-in-theory, the whole tool changes shape.
 
 **2. Does `smooth 0` at native size pass pixels through 1:1?** The one known-good case is
 worse than "the LSM resamples cleanly" — `PacMan.sho` points at 1910x470 frames with
-`smooth 1`, so the LSM has been doing a 10x downscale *and* the 2x vertical squash
+`smooth 1` against a 96 x 24 target region, so the LSM has been doing a ~20x downscale
 internally. Native-size passthrough has never been observed on this wall.
 
 ## Open questions
 
-- **Canvas 2D subset in Go is the largest single chunk of work here.** `fillRect` and
-  color parsing are trivial; the risk is scope creep toward paths and text. Worth
-  building the smallest version first and letting real shows pull on it.
-- goja performance: 937 frames x 4,608 px is 4.3M pixel-ops. Fine for rect-based drawing;
-  a per-pixel JS callback would not be, which is another reason the API is
-  primitive-shaped rather than pixel-shaped.
+- **Canvas 2D or a shader model?** Currently unresolved, and it is the biggest remaining
+  design question. See below.
 - Does the editor pane need a real code editor (CodeMirror, embedded) or is a `<textarea>`
   with error output enough for v1? Probably the textarea.
+
+### Open: Canvas 2D, or a shader model?
+
+The API above is a Canvas 2D subset. The alternative is a fragment-shader shape — one
+pure function, called per pixel:
+
+```js
+function pixel(x, y, t) {
+  const wave = Math.sin(x * 0.05 - t * 3) * 0.5 + 0.5;
+  return hsl((x * 2 + t * 60) % 360, 1, wave * 0.5);
+}
+```
+
+**Leaning: shader-first.** Three reasons.
+
+*The resolution makes it affordable.* 4,608 pixels is nothing. A 937-frame bake is 4.3M
+calls — single-digit seconds in goja — and live preview needs ~138K calls/sec to hold
+30 fps, which is comfortably within a tree-walking interpreter at this size. Per-pixel JS
+would be absurd at 1080p and is unremarkable here. **This is load-bearing and unverified:
+benchmark goja on a per-pixel callback before committing.** It reverses an earlier
+assumption in this doc that per-pixel would be too slow.
+
+*It is the better AI prior.* The Canvas 2D argument was that models know the API. But for
+*this kind of content* — plasmas, waves, tunnels, color cycling, noise fields on a 16:1
+strip — the Shadertoy corpus is enormous and is exactly `(uv, time) → rgb`. "Cool demo on
+an LED strip" sits closer to that training distribution than to `fillRect`.
+
+*The surface is one line.* One function signature, no state machine, no draw order, no
+`fillStyle` to forget. That is the smallest possible thing to fit in a pasted prompt,
+which is the constraint this design already committed to.
+
+**Where it loses:** sprites and text. The existing assets are images — `PacMan Logo.png`,
+`Ready!.png`, `Player One.png`, the chevrons — and sampling a texture from a per-pixel
+function is clumsier than blitting it.
+
+**Likely resolution: both, as alternate entry points.** A show exports whichever it
+needs; the runner picks based on which is defined.
+
+```js
+function pixel(x, y, t) { ... }   // shader — the default, best for demos
+function draw(ctx, t)   { ... }   // imperative — for logos, sprites, discrete shapes
+```
+
+That costs one extra concept in the prompt and keeps the imperative surface tiny, since
+`draw` no longer has to carry gradients or anything continuous. Build `pixel` first — it
+is a day of work and it is where the demos come from.
 - [RESOURCES.md](RESOURCES.md) gap 4 (corridor width) is no longer load-bearing — the
   preview's gap is a fixed visual separator. Gap 3 (orientation) is now half-answered: the
   runs are antiparallel; only the two absolute flips remain.
