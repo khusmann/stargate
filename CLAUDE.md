@@ -59,15 +59,13 @@ export function draw(ctx, t)   { ... }   // imperative — composites on top
 `(uv, time) → rgb` is both the smaller surface and the stronger AI prior for this kind of
 content. `draw` handles sprites. Define either or both.
 
-There is no PNG-directory input and no `show.toml` — images and video are *assets* a
-script loads, not an alternate way in. That deletes the entire input-validation surface:
-frame size, count, and numbering cannot be wrong when nothing outside the tool produces
-them.
+There is no PNG-directory input, no `show.toml`, and in v1 no assets — a show is one
+self-contained file of code, easy to copy, paste, share, and hand to an AI. That deletes
+the entire input-validation surface: frame size, count, and numbering cannot be wrong when
+nothing outside the tool produces them. Images and video are deferred to v2.
 
-A **project is a folder** on disk, opened once with `showDirectoryPicker()` and remembered
-in IndexedDB: `show.js` plus its assets in, `frames/` and `Show.sho` out. `load()` resolves
-against it. Video decodes once at import, downscaled to 192 x 24 and held in memory — 937
-frames is ~17 MB — so `clip.at(t)` is an array lookup and preview stays instant.
+Persistence is `localStorage` plus the script compressed into the URL fragment, so sending
+a link sends a running show.
 
 Non-programmers author via a **Copy AI prompt** button that hands any assistant the full
 authoring context; the API reference and that prompt are the same document.
@@ -77,13 +75,17 @@ authoring context; the API reference and that prompt are the same document.
 ```
 show.js  ─→  run  ─→  preview (two strips, zoom, pan, scrub)
                  ↓
-             export  ─→  Show.sho + frames/  ─→  straight to G: on the LSC box
+             export  ─→  one zip: Show.sho + frames/  ─→  extract to G: on the LSC box
 ```
 
-Open the Pages URL on the LSC machine and export with the File System Access API — https
-is a secure context, so `showDirectoryPicker()` works and frames land directly in
-`G:/My Drive/...`. Zip download is the fallback for non-Chromium browsers. Hosting also
-means deploys are a git push and nobody runs a stale copy.
+Export is **always a zip** — no File System Access API, so no Chromium requirement and no
+secure context, which means the same bundle also works from a `file://` double-click if
+the LSC box turns out to be offline. Pages stays the default because deploys are a git
+push and nobody runs a stale copy, but it is a convenience, not a requirement.
+
+Frames store uncompressed inside the zip (PNG is already compressed) and the zip is
+streamed into a `Blob` rather than buffered, so peak memory is flat in show length. A
+realistic 30 s–2 min show is 4–20 MB.
 
 **The script is the source of truth.** The old pipeline hand-rendered four 937-frame
 directories off one video and lost track of them: two are mislabeled (the dir named `10x`

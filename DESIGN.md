@@ -11,10 +11,10 @@ change the shape of this.
 ## What the tool is
 
 A single-page web app, hosted on GitHub Pages. It runs shows written as JavaScript,
-previews them on the real ceiling geometry, and exports the `.sho` plus the PNG frame
-sequence it references.
+previews them on the real ceiling geometry, and exports a zip containing the `.sho` plus
+the PNG frame sequence it references.
 
-No server, no binary, no install — open the URL on the LSC box and export straight to `G:`.
+No server, no binary, no install, no accounts. A show is one file of code.
 
 ## Decisions
 
@@ -32,8 +32,8 @@ export function pixel(x, y, t) { ... }
 ```
 
 Everything downstream is generated. There is no PNG-directory input format, no
-`show.toml`, and no separate path for non-programmers — images and video are *assets* a
-script loads (see [Assets](#assets)), not an alternate way in.
+`show.toml`, and in v1 no assets at all — a show is one self-contained file of code, which
+is what makes it trivial to copy, paste, share, and hand to an AI.
 
 This deletes the entire input-validation surface. Frame size, count, numbering, and
 zero-padding cannot be wrong, because nothing outside the tool produces them. The canvas
@@ -154,24 +154,26 @@ the content this wall wants — plasmas, waves, tunnels, colour cycling on a 16:
 the Shadertoy corpus is enormous and is exactly `(uv, time) → rgb`, so it is both the
 stronger AI prior and the smaller surface: one signature, no state machine, no draw order.
 
-### `draw` — for sprites and discrete shapes
+### `draw` — for discrete shapes
 
-Where a shader is clumsy: blitting image assets, and anything with hard edges you would
-rather place than derive.
+Where a shader is clumsy: hard edges you would rather place than derive.
 
 ```js
-const logo = await load("PacMan Logo.png");
-
 export function draw(ctx, t) {
-  ctx.drawImage(logo, (t * 40) % 192, 0);
+  ctx.fillStyle = "#fff";
+  ctx.fillRect((t * 40) % 192, 4, 8, 4);
 }
 ```
 
 `ctx` is a real `CanvasRenderingContext2D` on a 192x24 canvas, so the whole Canvas API is
 present. The *documented* surface stays small — `fillStyle`, `globalAlpha`, `fillRect`,
-`clearRect`, `drawImage`, plus `ctx.band("right"|"left"|null)` to clip and
-`ctx.copy("right→left")` to duplicate — because the prompt has to fit in a page. Anything
-continuous belongs in `pixel`.
+`clearRect`, plus `ctx.band("right"|"left"|null)` to clip and `ctx.copy("right→left")` to
+duplicate — because the prompt has to fit in a page. Anything continuous belongs in
+`pixel`.
+
+Without assets, `draw`'s original justification (blitting logos) is deferred to v2. It
+stays in v1 anyway because it costs nothing — `ctx` is already a canvas — and because
+`drawImage` then simply starts working when assets arrive.
 
 Bands are named for the strips, not for screen position: "top" and "bottom" are an
 artifact of how the preview stacks them and mean nothing in the room. `copy` is a straight
@@ -189,64 +191,19 @@ That constraint is doing real work: it is why `pixel` is one function rather tha
 library, why `draw` documents a handful of calls even though the full Canvas API is
 technically reachable, and why a hand-written completion source is currently enough.
 
-## Assets
+## Sharing and persistence
 
-There is no server to upload to — Pages is static. So the app reads assets off the user's
-own disk, using the same File System Access API the export already needs.
+A show is text, so sharing a show is sharing text. No accounts, no server, nothing to
+upload.
 
-### A project is a folder
+- **`localStorage`** holds the current script, so a reload never loses work.
+- **The URL carries the show** — the script compressed into the fragment, the way every JS
+  playground does it. Sending someone a link sends them the show, running.
+- **Copy/paste** is the universal path: it is just a file, and it round-trips through
+  chat, email, and any AI assistant without ceremony.
+- **Bundled examples** ship with the app as a starting gallery.
 
-Pick a working directory once with `showDirectoryPicker()`. The app reads `show.js` and
-any assets from it, and writes `frames/` and `Show.sho` back into it. The handle persists
-in IndexedDB, so returning to the URL reopens the same project behind one permission
-click.
-
-```
-Warp Tunnel/
-  show.js
-  chevron.png
-  clip.mp4
-  frames/          ← generated
-  Show.sho         ← generated
-```
-
-`load("chevron.png")` resolves against that folder, exactly like a normal build tool. The
-browser app ends up behaving like a local one: the project is a real directory you can
-zip, commit, or point `animationdir` straight at.
-
-**This qualifies "a show is a script."** A pure `pixel()` show is still one portable file.
-A show with assets is a folder — the script alone won't run without them. That is the
-honest trade for having assets at all, and it degrades gracefully rather than all at once.
-
-**Fallback: drag-and-drop into memory.** Non-Chromium browsers, or quick experiments with
-no folder set up. Dropped files go into a `Map<name, Blob>` backed by IndexedDB so they
-survive a reload. Same `load()` API; the difference is only where bytes come from.
-
-### Video
-
-Decode **once at import**, downscale to 192x24 immediately, and keep the frames in memory.
-The target resolution is what makes this work: 937 frames at 192x24 RGBA is ~17 MB, and
-even a five-minute clip is ~166 MB. A 173 MB source video becomes a small array.
-
-```js
-const clip = await loadVideo("clip.mp4");
-
-export function draw(ctx, t) {
-  ctx.drawImage(clip.at(t), 0, 0);
-}
-```
-
-`clip.at(t)` is then an array lookup, so live preview is instant and the bake costs
-nothing. Decoding is the slow part and it happens once, with a progress bar.
-
-Two decode paths: **WebCodecs** (`VideoDecoder`, plus a demuxer) runs at hundreds of
-frames per second and matches the Chromium-only stance already taken for export; a
-seek-and-`drawImage` loop on a `<video>` element is the universal fallback, correct but
-tens of milliseconds per frame.
-
-This is also where the old `fit`/aspect question lands, and it lands as ordinary code —
-`ctx.drawImage(clip.at(t), 0, 0, 192, 24)` stretches, and any other framing is arithmetic
-the author writes and sees immediately. No config key, no default to get wrong.
+Export (below) is the only filesystem interaction in v1.
 
 ## Preview
 
@@ -345,31 +302,66 @@ Output is a `.sho` plus a directory of PNG frames.
 - **`.sho`** — UTF-16LE with BOM and CRLF (see [RESOURCES.md](RESOURCES.md)). One
   `Meta Effect` containing one `Animation`.
 - **`animationdir`** is an absolute Windows path (`G:/My Drive/Fuse Live Arts/Artwork/
-  Stargate/...`). The browser cannot read the real path from a directory handle, so the
-  user types the project folder's Windows path once and it is remembered in
-  `localStorage` — a property of the LSC machine, not of a show.
+  Stargate/...`). A browser cannot learn a real filesystem path, so the user types it once
+  and it is remembered in `localStorage` — a property of the LSC machine, not of a show.
 
 Fixed by the animation contract, not configurable: `gid` 4999 (`All (front)`), `scale` 1,
 `smooth` 0, `preload` 0, `xoffset`/`yoffset` 0, `transenabled` 0. `end` is derived —
 937 frames ÷ 30 fps = 31233 ms, exactly what `PacMan.sho` carries.
 
-### Getting it onto disk
+### Always a zip
 
-**Hosted on GitHub Pages.** https is a secure context, so the **File System Access API**
-works: `showDirectoryPicker()`, then a handle per file, writing straight to `G:`.
-Chromium-only, which is fine on a Windows box with Edge. This is the reason to host rather
-than ship a file — from a `file://` origin the directory picker is unavailable, and export
-would degrade to a zip the user has to extract and move.
+One download containing `Show.sho` and `frames/`. Extract it to `animationdir` on the LSC
+box. No File System Access API, no directory handles, no permission prompts.
 
-Hosting pays for itself twice over: deploying is a git push, and there is no version drift
-between two people running different copies.
+That choice removes the last Chromium-only dependency and the last thing that made hosting
+load-bearing: with no secure-context requirement, the same bundle works from a `file://`
+double-click, so an offline or air-gapped LSC machine is no longer a risk. GitHub Pages
+stays the distribution default because deploys are a git push and nobody runs a stale
+copy — but it is now a convenience, not a requirement.
 
-- **Zip download** — fallback for non-Chromium browsers and for the offline case. Needs a
-  small zip lib (fflate, ~8 KB) inlined. ~13 MB raw for a 31 s show, less compressed.
-- **Offline.** Pages needs the LSC box online at least once. If it turns out to be
-  air-gapped, the same bundle is also a single-file release artifact — same code, zip
-  export only. Worth confirming the machine has internet before relying on the hosted
-  path.
+### Size
+
+Frames are PNG-compressed. A 192x24 frame is 13.8 KB raw; typical procedural content
+compresses to ~1–4 KB, photographic-ish content to ~4–8 KB.
+
+| Show | Frames @30fps | Zip (≈4 KB/frame) |
+|---|---|---|
+| PacMan (31 s) | 937 | ~4 MB |
+| Warp Tunnel (126 s) | 3,800 | ~15 MB |
+| 5 min | 9,000 | ~36 MB |
+| 10 min | 18,000 | ~72 MB |
+
+Real shows are 30 s to ~2 min, so the realistic answer is **4–20 MB — a non-issue.** Two
+implementation choices keep it that way well past those sizes:
+
+- **Store, don't deflate.** PNGs are already compressed; re-deflating them gains nothing
+  and costs CPU and memory. Use level 0 for frames, and deflate only the tiny XML.
+- **Stream the zip.** Encode one frame at a time, discard the pixel buffer, and feed
+  fflate's streaming API, accumulating output chunks into a `Blob` rather than one giant
+  `ArrayBuffer` — Blob backing spills to disk, a single typed array does not. Peak heap
+  stays flat in show length instead of growing with it.
+
+Both are barely more code than the naive version and together they remove the ceiling, so
+there is no reason not to do them from the start.
+
+## Deferred to v2
+
+Cut from v1 to keep a show a single copy-pasteable file. Recorded so the reasoning does
+not have to be rediscovered:
+
+- **Image assets.** Would make a show a *folder* rather than a file — script plus its
+  images — read via `showDirectoryPicker()` with the handle persisted in IndexedDB.
+  `ctx.drawImage` already works, so this is mostly plumbing for `load()`.
+- **Video.** Decode once at import, downscale to 192x24 immediately, hold frames in
+  memory: 937 frames at 192x24 RGBA is ~17 MB, so a 173 MB source becomes a small array
+  and `clip.at(t)` is an array lookup. WebCodecs for speed, seek-and-`drawImage` as
+  fallback. Note this also answers the old `fit`/aspect question as ordinary code —
+  `ctx.drawImage(clip.at(t), 0, 0, 192, 24)` — with no config key to get wrong.
+
+Worth doing eventually: the existing art (`PacMan Logo.png`, `Ready!.png`, the chevrons)
+and the OpenShot project in `resources/` are all asset-shaped, and that is the friend's
+native workflow.
 
 ## Risk gates
 
@@ -387,8 +379,6 @@ on this wall.
 
 ## Open questions
 
-- **Is the LSC machine online?** The hosted path needs it once. If not, fall back to the
-  single-file release artifact and zip export.
 - When does `stargate.d.ts` outgrow a hand-written completion source and justify the
   TypeScript language service? Revisit if the API passes ~15 symbols.
 - The chevron art is 52x24 drawn at `starty` 12 for *both* groups — one full-height shape
