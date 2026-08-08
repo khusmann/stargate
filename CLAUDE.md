@@ -1,77 +1,116 @@
-Here's a complete list of my hardware: 1x LSM Gen 5 (main control unit) 1x
-Antumbra Ethernet Keypad 4x sPDS 480ca (power/data handlers) 128x iColor Module
-FX 6:36 (LED panels)
+# Stargate
 
-Goal:
-Replace the Color Kinetics LSM/Light System Composer toolchain with something we can
-actually maintain.
+Authoring pipeline for a 192 x 24 LED installation driven by a Color Kinetics LSM
+Gen 5. It generates `.sho` show files and the baked PNG frame sequences they
+reference. The LSM handles playback, scheduling, and keypad triggering.
 
-## Architecture (decided)
+Hardware: 1x LSM Gen 5, 1x Antumbra Ethernet Keypad, 4x sPDS-480ca, 128x iColor
+Module FX 6:36 (36 nodes each).
 
-**A headless Go engine that serves a web UI.**
+## How shows are generated
 
-This matches the shape of the LSM Gen 5 we're replacing: a standalone always-on box
-with a web interface, keypad triggering, and calendar-scheduled playback. The engine
-owns the UDP socket, show clock, schedule, and keypad listener, and keeps running
-whether or not anyone is logged in. The UI is just a client, so "cross-platform"
-falls out for free — the app is a URL, reachable from a phone while standing in the
-room.
+`.sho` is UTF-16LE XML whose `gid` resolves against groups in the `.map`, so the LSM
+is scriptable from outside.
 
-Why Go:
+Every generated show is **one `Meta Effect` containing one `Animation`**, pointing at
+a directory of PNG frames. That gives direct control of all 4,608 pixels — all content
+reduces to pixels — and makes preview exact, since the preview renders the same frames
+the LSM will play.
 
-- The whole engine fits in the stdlib — `net` (UDP), `net/http` (serve UI), `time`
-  (show clock). Near-zero dependencies, so there is nothing to rot.
-- The Go 1 compatibility promise. This hardware is 2005–2016 gear that already
-  outlived its vendor's software; design for that timescale.
-- `//go:embed` bakes the web UI into the binary. Deployment is `scp` of one file — no
-  runtime to install on the target.
+`resources/Shows/PacMan.sho` is the template: 3.2 KB, exactly this structure.
 
-The web UI should be plain HTML/JS with **no build step**, to avoid frontend
-dependency rot too. The UI is modest: canvas preview, show list, schedule editor,
-keypad mapping.
+### Animation contract
 
-## Deployment target
+- `gid` **4999** (`All (front)`) for full-wall content.
+- Author at exactly 192 x 24; emit `scale` 1, `smooth` 0. **Unverified** — PacMan
+  ships `smooth` 1 on upscaled frames, so the LSM resamples in the one known-good
+  case. Confirm early that `smooth` 0 at native size passes pixels through 1:1.
+- `animationdir` and `imagefile` are absolute Windows paths (`G:/My Drive/Fuse Live
+  Arts/Artwork/Stargate/...`). The emitter takes the asset root as config.
+- `preload` is 0 in PacMan across ~937 frames. If the first pass stutters, try 1.
 
-Raspberry Pi 4/5, static IP on the controllers' subnet (`10.4.168.x`), systemd unit
-with `Restart=always`.
+## Validate first
 
-Headroom is large — 3.3 Mbit/s and a few million pixel-ops/sec against gigabit and a
-multi-core ARM. The risks worth engineering against are operational:
+Confirm LSC imports a hand-written `.sho`. The backups are named
+`LSE-Database-Export`, hinting that shows live in a database and `.sho` is an export
+format. Hand-edit one value in `PacMan.sho`, load it, see if the change takes.
 
-- **Frame pacing.** Hold a steady 33.3 ms tick off a monotonic clock with drift
-  correction, and run the output loop at elevated priority. Sloppy pacing shows up as
-  stutter in scrolling content.
-- **SD card wear** is the top killer of always-on Pis. Boot from USB SSD or an A2
-  card, logs on tmpfs, consider read-only root.
+## Tooling
+
+A single Go binary, plain HTML/JS, no build step.
+
+```
+stargate build   show.toml     # headless, scriptable
+stargate preview show.toml     # localhost server + browser, watch & reload
+```
+
+Go cross-compiles to `windows/amd64`, so the deliverable is one `.exe` on the LSC
+machine with no runtime to install — a non-programmer is a first-class user here.
+`//go:embed` bakes in the UI. The stdlib covers everything but video ingest, which
+shells out to `ffmpeg`.
+
+## Authoring flow
+
+```
+show.toml  ─┐
+assets/    ─┼─→  compile  ─→  build/Show.sho + frames/  ─→  drop on the LSC box
+map        ─┘                       ↓
+                            preview (canvas, gutter, scrub, watch)
+```
+
+Two audiences: I author procedurally (shows as code, rendered to frames); my friend
+drops in a PNG directory or a video file and the tool resamples, previews, and wraps
+it.
+
+**Own the downscale.** 192 x 24 is an 8:1 sliver, so authoring happens at a multiple —
+`Animation Template.png` is 765 x 93 (≈4x), and every PacMan render is a multiple of a
+191 x 47 master. The old pipeline hand-rendered four near-identical 937-frame
+directories differing only in sharpness and saturation. Make resampling and grading
+declared parameters, so a variant is a one-line change and a rebuild.
+
+**Preview fidelity is the product.** Show Designer's timeline already works; what it
+can't show is how content reads once the ceiling gap bisects it.
 
 ## Physical layout
 
-The wall is **two long strips running along either side of the ceiling**, each 192 x
-12 pixels (32 modules long, 2 modules wide). The 192 x 24 canvas stacks them:
+Two strips along either side of the ceiling, each 192 x 12 (32 modules long, 2 wide).
+The 192 x 24 canvas stacks them. Verified against the map:
 
-| Strip | Canvas rows | Controllers |
+| Strip | Rows | Controllers |
 |---|---|---|
-| A | 0–11 | `CTRL-A` (cols 0–95) + `CTRL-B` (cols 96–191) |
-| B | 12–23 | `CTRL-C` (cols 0–95) + `CTRL-D` (cols 96–191) |
+| Right | 0–11 | `CTRL-A` (.123, cols 0–95) + `CTRL-B` (.135, cols 96–191) |
+| Left | 12–23 | `CTRL-C` (.117, cols 0–95) + `CTRL-D` (.81, cols 96–191) |
 
-Each port drives one 6 x 12 cross-section — 2 modules stacked across a strip's full
-width — so port boundaries run crosswise along each strip.
+Each port drives one 6 x 12 cross-section, so port boundaries run crosswise.
 
-This shapes the authoring model: content spanning all 24 rows is **bisected by the
-ceiling gap**, appearing as two halves on opposite sides of the corridor. Treat the
-canvas as two bands that happen to share a timeline, give the preview a gutter between
-rows 11 and 12, and make mirroring across the corridor axis a first-class operation —
-the existing Warp Tunnel art ships every chevron in both normal and `(rev)` form for
-exactly this reason.
+Content spanning all 24 rows is **bisected by the ceiling gap** — top 12 rows on one
+side of the corridor, bottom 12 on the other. The map marks the boundary: row pitch is
+24 units everywhere except between rows 11 and 12, which is 36. Treat the canvas as two
+bands sharing a timeline, give the preview a gutter there, and make mirroring across
+the corridor axis first-class (the Warp Tunnel art ships every chevron in normal and
+`(rev)` form for this reason).
+
+## Groups
+
+`gid` is the decimal value of a group's hex `<s>` in the `.map`.
+
+| Group | gid | Region |
+|---|---|---|
+| `All (front)` | 4999 | rows 0–23, cols 0–191 — **default for new work** |
+| `Right (front)` | 2596 | rows 0–11 |
+| `Left (front)` | 5001 | rows 12–23 |
+| `Front (center)` | 2410 | rows 0–23, cols 0–95 (PacMan uses this) |
+| `Back (center)` | 2603 | rows 0–23, cols 96–191 |
+| `Row R1`…`R12` | 1966…2373 | single rows 0–11 |
+| `Row L1`…`L12` | 2447…2606 | single rows 12–23 |
+
+Since we bake frames, groups are a compile-time convenience — a named region to draw
+into. Default to `All (front)` and composite layers in our own code.
 
 ## Scale
 
-192 x 24 = 4,608 pixels, 30 fps. One frame is 13.8 KB; the full wall is ~415 KB/s
-across 4 controllers. An entire 31 s animation as raw RGB is ~13 MB — small enough to
-hold whole shows uncompressed in RAM. Bake animations to frame data ahead of time
-(the existing PNG sequences in `resources/` already work this way) so the engine just
-plays back pixel buffers.
+4,608 pixels at 30 fps. One frame is 13.8 KB; a 31 s show is ~13 MB raw, so whole
+shows fit in RAM — render eagerly.
 
-See [RESOURCES.md](RESOURCES.md) for an index of the `resources/` folder — vendor
-docs and software, the fixture map (4,608 pixels on a 192x24 canvas), existing
-`.sho`/`.map` files and their formats, and show assets.
+See [RESOURCES.md](RESOURCES.md) for the `resources/` index: vendor docs, the fixture
+map, `.sho`/`.map` formats, and show assets.

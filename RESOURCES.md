@@ -1,246 +1,299 @@
 # Resources Index
 
-An index of [resources/](resources/) — the reference material, vendor software, and
+An index of [resources/](resources/) — reference material, vendor software, and
 existing show/mapping files for the Stargate LED wall.
 
-Nothing here is source code. It is the raw material a replacement app has to
+Nothing here is source code. It is the raw material the authoring pipeline has to
 understand: the Color Kinetics *Light System Composer* (LSC) toolchain, the fixture
-map for the installation, and the shows authored against it.
+map, and the shows authored against it.
 
-**Total:** ~890 MB, ~3,900 files (3,789 of them are animation frame PNGs).
+**Total:** ~890 MB, ~3,900 files (3,789 of them animation frame PNGs).
 
 ---
 
-## The physical system (as recorded in the map files)
+## The physical system
 
 Derived by parsing `Shows/Stargate v3 - Pacman.map`:
 
 | Property | Value |
 |---|---|
 | Controllers | 4x sPDS-480ca 7.5V Ethernet |
-| Controller IPs | [redacted], .117, .123, .135 |
-| Controller serials | CTRL-D, CTRL-C, CTRL-A, CTRL-B |
 | Controller firmware | `SFT-000098-00` rev 03 |
 | Ports | 16 per controller = 64 total |
 | Modules | 2 per port = 128 iColor Module FX 6:36 |
 | Nodes per module | 36 |
 | **Total pixels** | **4,608** |
-| Logical canvas | **192 x 24** (192 unique X positions, 24 unique Y) |
-| Coordinate units | 24 per pixel; X 60→4644, Y 84→636, Z always 0 |
+| Logical canvas | **192 x 24** |
+| Coordinate units | 24 per pixel; X 60→4644, Y 84→648, Z always 0 |
+
+Each controller drives exactly one quadrant (1,152 px = 12 rows x 96 cols):
+
+| Serial | IP | Rows | Cols |
+|---|---|---|---|
+| `CTRL-A` | [redacted] | 0–11 | 0–95 |
+| `CTRL-B` | [redacted] | 0–11 | 96–191 |
+| `CTRL-C` | [redacted] | 12–23 | 0–95 |
+| `CTRL-D` | [redacted] | 12–23 | 96–191 |
 
 ### Physical layout: two ceiling strips
 
-The wall is **two long strips running along either side of the ceiling**. The map
-does not record this — every node has `z=0` and an identical orientation quaternion,
-and X/Y are evenly spaced with no gaps — so the 192x24 canvas is a *logical*
-unwrapping of two physically separate runs.
+The wall is **two long strips running along either side of the ceiling**, each
+192 x 12 px (32 modules long, 2 modules wide, 16:1). The 192 x 24 canvas is a
+*logical* stacking of two physically separate runs.
 
-The split is by **row band**, not column:
+The split is by **row band**, not column, and three independent facts confirm it:
 
-| Strip | Canvas rows | Controllers | Size |
-|---|---|---|---|
-| A (one ceiling side) | 0–11 | `CTRL-A` (cols 0–95) + `CTRL-B` (cols 96–191) | 192 x 12 |
-| B (other ceiling side) | 12–23 | `CTRL-C` (cols 0–95) + `CTRL-D` (cols 96–191) | 192 x 12 |
+1. **The map encodes the boundary.** X pitch is a uniform 24 units across all 192
+   columns. Y pitch is 24 units for every row *except* between rows 11 and 12, which
+   is **36** — a deliberate marker at exactly the predicted seam.
+2. **Controller quadrants** split 0–11 / 12–23 (table above).
+3. **Group names.** The map author labeled them: `Row R1`–`R12` are rows 0–11,
+   `Row L1`–`L12` are rows 12–23. "Left/Right" is the ceiling side; "Front/Back" is
+   position along the corridor (column half).
 
-Each strip is 32 modules long by 2 modules wide (16:1). Each controller drives half a
-strip's length; each port drives one **6 x 12 cross-section** — 2 modules stacked
-across the strip's full width. That a port maps to a complete cross-section is the
-structural confirmation that the strip is 12 px wide: the alternative column-split
-reading gives 96 x 24 blocks at only 4:1, which is not strip-shaped and would cut
-ports in half.
+Each port drives one **6 x 12 cross-section** — 2 modules stacked across the strip's
+full width — so port boundaries run crosswise. That a port maps to a complete
+cross-section confirms the strip is 12 px wide; the alternative column-split reading
+gives 96 x 24 blocks at only 4:1, which is not strip-shaped and would cut ports in
+half.
 
-**Consequence for content.** The canvas is two stacked strips, so anything drawn
-across the full 24 rows is **bisected by the ceiling gap** — top 12 rows appear on one
-side of the corridor, bottom 12 on the other, separated by however many feet of
-ceiling. The map has no notion of that gap (Y runs continuously 84→636), so a
-faithful preview needs a gutter inserted between rows 11 and 12. This explains why
+**Consequence for content.** Anything drawn across the full 24 rows is **bisected by
+the ceiling gap** — top 12 rows on one side of the corridor, bottom 12 on the other. A
+faithful preview needs a gutter between rows 11 and 12. This is why
 `Warp Tunnel Images/` ships every chevron in both normal and `(rev)` form: the two
-strips need content mirrored about the corridor axis to read symmetrically from
-below.
+strips need content mirrored about the corridor axis to read symmetrically from below.
 
-That 192x24 canvas is the single most important number in this repo — the image and
-video assets are all authored to it (the PacMan master is 191x47, i.e. the canvas at
-~2x vertical stretch for editing).
+Note the 36-unit gap is a *token* separator, not a measurement — 1.5x pixel pitch,
+where a real corridor is tens of pitches wide. It marks the seam; it does not size it.
 
 ---
 
-## File formats found here
+## File formats
 
 | Ext | What it is |
 |---|---|
-| `.map` | Fixture map. UTF-16LE XML. Controllers, ports, per-node position/channel, groups. |
-| `.sho` | Show file. UTF-16LE XML. A list of timed, layered effects. |
-| `.pck` | LSC database export. **Encrypted** (`openssl enc` salted) — not readable without LSC. |
+| `.map` | Fixture map. UTF-16LE XML with BOM, no XML declaration. |
+| `.sho` | Show file. UTF-16LE XML with BOM, CRLF. A list of timed, layered effects. |
+| `.pck` | LSC database export. Encrypted — `openssl enc` salted (`Salted__` magic). |
 | `.osp` | OpenShot project (JSON) used to prep the PacMan video. |
-| `.lnk` | Windows shortcuts to LSC tools — dead on Linux, useful only as a record of tool names. |
+| `.lnk` | Windows shortcuts to LSC tools — dead on Linux, useful as a record of tool names. |
 
-### `.map` schema (UTF-16LE XML, no declaration)
+### `.map` schema
 
 ```
 <map>
-  <imagefile/> <postsync/>
-  <c>                       controller
-    <t> <s> <n> <sn> <ip> <mac> <d> <v> <vs> <ids>
-    <pl><p><pn><pt><pf></p>...</pl>    port list
-  </c> x4
-  <l>                       light / node  (4,608 of these)
-    <t> <st> <s>
+  <imagefile> <postsync>
+  <c>                     controller x4
+    <t> <s> <n> <sn> <ip> <mac> <d> <v> <vs>
+    <ids/>                present but empty
+    <pl><p><pn><pt><pf></p> x16</pl>        port list
+    <l>HEX</l> x1152      ids of the nodes this controller drives
+  </c>
+  <l>                     node x4608
+    <t> <st> <s>          <s> is the node's hex id
     <n>Port 01 Module-1 Node 002</n>
-    <pn> <ln> <f> <c> <fc>  port, light no., fixture, controller serial
-    <x> <y> <z>             position on the canvas
-    <q0..q3>                orientation quaternion
-    <ch>                    channel
+    <pn> <ln> <f>
+    <c>CTRL-A</c>       owning controller serial
+    <fc>
+    <x> <y> <z>           position; canvas col = (x-60)/24
+    <q0..q3>              orientation quaternion (identical for all nodes)
+    <ch>                  channel
   </l>
-  ...groups, whose members are <l>HEX</l> id references
+  <g>                     group x4646
+    <t>                   1 = user group (38), 3 = per-node singleton (4608)
+    <s>                   group id, hex
+    <n>                   name
+    <c>HEX</c> ...        member node ids
+  </g>
 </map>
 ```
 
-Note the ambiguity: `<l>` is used both as the node element **and** as a hex id
-reference inside group lists. Grepping `<l>` naively counts 9,216; the real node
-count is 4,608 (count `<x>` instead).
+**`<l>` is overloaded.** It is both the node element *and* a bare hex id reference.
+The 9,216 occurrences are 4,608 node definitions plus 4,608 references inside the four
+controller blocks. Count `<x>` to get the real node count. Group members are `<c>`,
+not `<l>`.
 
-### `.sho` schema (UTF-16LE XML, CRLF)
+### Groups → `gid`
 
-A flat sequence of `<effect>` blocks, each with `type`, `gid`, `transparency`,
-`priority`, `begin`, `end` (ms), `fadein`, `fadeout`, `name`. The first is always a
-`Meta Effect` acting as the container/timeline.
+**A show's `gid` is the decimal value of a group's hex `<s>`.** Every `gid` used by
+every show resolves. All 38 user groups map to clean canvas regions:
 
-Effect types observed across all shows:
-`Meta Effect`, `Sweep`, `Streak`, `Sparkle`, `XYSpiral`, `XYBurst`, `Fixed Color`,
-`Chasing Rainbow`, `Image Scroll`, `Animation`.
+| Group | gid | Region |
+|---|---|---|
+| `All (front)` | 4999 | rows 0–23, cols 0–191 (all 4,608) |
+| `Right (front)`, `Right (top)`, `Right (front-top corner)` | 2596, 2597, 5005 | rows 0–11 |
+| `Left (front)`, `Left (top)`, `Left (front-top corner)` | 5001, 5002, 5004 | rows 12–23 |
+| `Front (center)` | 2410 | rows 0–23, cols 0–95 |
+| `Back (center)` | 2603 | rows 0–23, cols 96–191 |
+| `Right-Front (cen)` / `Right-Back (cen)` | 1378 / 2595 | rows 0–11, cols 0–95 / 96–191 |
+| `Left-Front (cen)` / `Left-Back (cen)` | 3798 / 5000 | rows 12–23, cols 0–95 / 96–191 |
+| `Row R1`…`R12` | 1966…2373 | single rows 0–11 |
+| `Row L1`…`L12` | 2447…2606 | single rows 12–23 |
+| `Edges (front)` | 5003 | rows 0, 11, 12, 23 (768 px) |
+
+Several groups are duplicates by region (`Right (front)` / `Right (top)` /
+`Right (front-top corner)` all cover rows 0–11) — legacy naming from the 2016 build.
+
+### `.sho` schema
+
+A flat sequence of nested `<effect>` blocks. The first is always a `Meta Effect`
+acting as the container/timeline. Each effect carries a 21-field envelope — `type`,
+`gid`, `transparency`, `priority`, `begin`, `end` (ms), `fadein`, `fadeout`, `name`,
+`eid`, plus start/end linking fields — then type-specific parameters:
+
+| Type | Parameters |
+|---|---|
+| `Meta Effect` | `loop`, `brightness` |
+| `Animation` | `animationdir`, `preload`, `fps`, `xoffset`, `yoffset`, `scale`, `transcolor`, `transenabled`, `smooth` |
+| `Image Scroll` | `imagefile`, `cycletime`, `startx/y`, `endx/y`, `startscale`, `endscale`, `smooth`, `transcolor`, `transenabled`, `bgcolor` |
+| `Sweep` | `fgcolor`, `bgcolor`, `cycletime`, `reverse`, `fgtrans`, `bgtrans` |
+| `Streak` | `fgcolor`, `bgcolor`, `width`, `fwdtail`, `revtail`, `reverse`, `cycletime`, `fgtrans`, `bgtrans`, `wrap` |
+| `Sparkle` | `decay`, `density`, `cycletime`, `sparklecolor`, `bgcolor`, `sparkletrans`, `bgtrans` |
+| `XYSpiral` | `cycletime`, `twist`, `number`, `clockwise`, `centerx`, `centery` |
+| `XYBurst` | `cycletime`, `width`, `centerx`, `centery`, `cycledir`, `rainbowdir` |
+| `Chasing Rainbow` | `cycletime`, `groupoffset`, `reversedir`, `reversecolor`, `startcolor` |
+| `Fixed Color` | `color`, `white` |
+
+`Animation` and `Image Scroll` reference external files by **absolute Windows path**
+(`G:/My Drive/Fuse Live Arts/Artwork/Stargate/...`). Everything else is parametric,
+rendered inside the LSM.
 
 ---
 
-## resources/ tree
+## `resources/` tree
 
 ### Top level — documentation
 
 | File | Notes |
 |---|---|
-| `LSM_UserGuide.pdf` | 14 MB. The Light System Manager manual. Primary protocol/behavior reference. |
+| `LSM_UserGuide.pdf` | 14 MB. The Light System Manager manual. |
 | `LSM_QuickStart.pdf` | Short-form LSM setup. |
 | `Creating Shows.pdf` | 3.3 MB, 2016. How shows are authored in Show Designer. |
 | `Quick Start Guide.pdf` / `.docx` | Site-specific operating instructions (docx updated Oct 2025). |
-| `ShowDesigner 1.9.0.lnk` | Shortcut. |
 
-### `Shows/` — 768 MB, the show content
+### `Shows/` — 768 MB
 
-**Current maps**
-- `Stargate v3 - Pacman.map` (4.0 MB) — newest, 4,608 nodes. Use this as the canonical layout.
-- `Stargate v2 - with Rows.map` (3.9 MB) — same 4,608 nodes, earlier grouping.
+**Maps**
+- `Stargate v3 - Pacman.map` (4.0 MB) — newest, canonical.
+- `Stargate v2 - with Rows.map` (3.9 MB) — same 4,608 nodes, 36 groups instead of 38.
 
-**Current shows**
-- `Warp Tunnel.sho` (135 KB) — 83 effects; heaviest use of `Image Scroll`, pairs with `Warp Tunnel Images/`.
-- `Starscape.sho` (105 KB) — 65 effects, all `Streak` + `Sparkle`.
-- `Rainbows.sho` (78 KB) — 53 effects, `Sweep`/`XYSpiral`/`XYBurst`.
-- `PacMan.sho` (3.2 KB) — trivial: one `Meta Effect` + one `Animation` pointing at the frame sequence.
-- `Animation Template.png` — 765x93 authoring template.
+**Shows**
 
-**`Shows/Warp Tunnel Images/`** (184 KB) — 33 PNG/PSD sprites scrolled by `Warp Tunnel.sho`.
-Bars are 18x24, chevrons 52x24, each in forward and `(rev)` variants numbered 1–8
-(a brightness/blackbody progression; see `Chevrons - Blackbody Progression.psd`).
-**All are 24 px tall — i.e. full canvas height.**
+| File | Size | Contents |
+|---|---|---|
+| `PacMan.sho` | 3.2 KB | 1 `Meta Effect` + 1 `Animation`. **The template for generated shows.** |
+| `Warp Tunnel.sho` | 135 KB | 83 effects — 33 `Sweep`, 24 `Image Scroll`, 12 `Streak`, 10 `Fixed Color`, 2 `Chasing Rainbow`, 1 `Sparkle`. |
+| `Starscape.sho` | 105 KB | 65 effects — 41 `Streak`, 23 `Sparkle`. |
+| `Rainbows.sho` | 78 KB | 53 effects — 30 `Sweep`, 14 `XYSpiral`, 2 each `XYBurst`/`Sparkle`/`Fixed Color`/`Chasing Rainbow`. |
+
+`Animation Template.png` — 765 x 93 authoring template, i.e. the full 192 x 24 canvas
+at ~4x.
+
+**`Shows/Warp Tunnel Images/`** (184 KB) — 33 PNG/PSD sprites scrolled by
+`Warp Tunnel.sho`. Bars 18 x 24, chevrons 52 x 24, each in forward and `(rev)`
+variants numbered 1–8 (a brightness/blackbody progression; see
+`Chevrons - Blackbody Progression.psd`). All 24 px tall — full canvas height.
 
 **`Shows/PacMan Animation/`** (735 MB — nearly the whole folder)
 - `Losing Match - PacMan.mp4`, `Winning Match - PacMan.mp4` — 173 MB each, raw source.
-- `Losing Match - PacMan - Edited.mp4` (11 MB), `PacMan - Losing Match edit 2.mp4` (2.7 MB, 2280x552, 31 s).
+- `Losing Match - PacMan - Edited.mp4` (11 MB), `PacMan - Losing Match edit 2.mp4`
+  (2.7 MB, 2280x552, 31 s).
 - `PacMan Video Edits.osp` + `_assets/` — OpenShot project, 30 fps, 1910x470.
-- Four rendered frame sequences, ~937 PNGs each (3,749 files total), named
-  `PacMan - Losing Match-#####.png`:
+- Four rendered frame sequences of ~937 PNGs each:
 
-  | Directory | Frame size |
-  |---|---|
-  | `rescaled 10x, sharp, sat` | 1910x470 |
-  | `rescaled 10x, sharp, less sat` | 1910x470 |
-  | `rescaled 3x, less sharp, less sat` | 1910x470 |
-  | `rescaled 3x, sharp, sat` | 573x141 |
+  | Directory | Frame size | Multiple of master |
+  |---|---|---|
+  | `rescaled 10x, sharp, sat` | 1910 x 470 | 10x |
+  | `rescaled 10x, sharp, less sat` | 764 x 188 | 4x |
+  | `rescaled 3x, less sharp, less sat` | 1910 x 470 | 10x |
+  | `rescaled 3x, sharp, sat` | 573 x 141 | 3x |
 
-  Note the naming is misleading — only the last is actually 3x-sized. All are
-  upscales of a 191x47 master, which is 192x24 stretched ~2x vertically.
+  The directory names do not match the actual sizes. All are upscales of a **191 x 47
+  master**.
+
+  **The master is 96 x 24 at 2x, not the full canvas.** `PacMan.sho` targets
+  `gid` 2410 = `Front (center)` = rows 0–23, cols 0–95 — the front *half* of the
+  corridor across both strips. 96 x 24 is 4:1, matching the master's 4.06:1; the full
+  192 x 24 canvas is 8:1 and does not fit.
+
 - Logos/overlays: `PacMan Logo.png`, `PacMan Logo (no border).png`, `Player One.png`,
   `Ready!.png`, `EDI 017 Class Schedule.png`.
 
 **`Shows/Old/`** (4.5 MB) — superseded maps: `9x Demo.map` (2016), `9x Demo 2025.map`
 (both ~650 nodes, a small test rig), `LightJoy.map` (3.9 MB, 9,528 nodes — a
-*different, larger* installation). Plus `Student Scripts/` — three 2016 student
-`.sho` files.
+*different, larger* installation). Plus `Student Scripts/` — three 2016 student `.sho`
+files.
 
-**`Shows/Backups/`** (20 MB) — dated copies of the above maps and shows, plus the two
-encrypted `LSE-Database-Export` `.pck` files (1.9.1, 1.9.6). Reference only; don't
-edit.
+**`Shows/Backups/`** (20 MB) — dated copies of the above, plus two encrypted
+`LSE-Database-Export` `.pck` files (1.9.1, 1.9.6). Reference only.
 
 ### `Light System Composer/` — 72 MB, vendor software
 
-Windows-only. Kept for reinstall and for reverse-engineering the on-wire protocol.
+Windows-only. Kept for reinstall.
 
 | Item | Notes |
 |---|---|
 | `Installer 2.3.2/` | 59 MB single-exe installer, May 2025 — newest. |
-| `Installer 1.9.0/` | 3.6 MB MSI + legacy `InstMsi` bootstrappers (2015). This is the version the `.lnk`s point at. |
-| `Installer 1.8.6/` | 2005-era. Includes `LSC User Guide.pdf`, `LSC Quick Start Guide.pdf`, v1.8/v1.8.6 release notes, and `Utilities/` shortcuts: EtherSAS, SAS, PDSTool, KeypadConfigTool, KinetInterfaceConfigTool. |
+| `Installer 1.9.0/` | 3.6 MB MSI + legacy `InstMsi` bootstrappers (2015). What the `.lnk`s point at. |
+| `Installer 1.8.6/` | 2005-era. Includes `LSC User Guide.pdf`, `LSC Quick Start Guide.pdf`, release notes, and `Utilities/` shortcuts: EtherSAS, SAS, PDSTool, KeypadConfigTool, KinetInterfaceConfigTool. |
 | `LSC 1.9.0/`, `*.lnk` | Shortcuts to ShowDesigner, ManagementTool, KeypadConfigTool. |
-
-The 1.8.6 utility list is the best inventory of what discrete tools exist —
-`PDSTool` and `KinetInterfaceConfigTool` in particular hint at the sPDS/KiNET
-configuration surface a replacement app would need.
 
 ### `Concept/` — 49 MB, design and build documentation
 
-- `Model.dwg` (32 MB) — AutoCAD model of the installation.
+- `Model.dwg` (32 MB) — AutoCAD model.
 - `Module Diagram.xlsx` — module layout / wiring plan.
 - Renders: `1) Location.png`, `2) Bottom.png`, `3) Top.png`, `4) ISO Background.png`.
-- Photos/video from the 2016 build: `20160311_163839-1.jpg`, `20160309_232504.mp4`.
+- Photos/video from the 2016 build.
 - `LightJoy - Model.png.jpg`, `LightJoy - Nittany Lion.jpg` — the earlier LightJoy install.
+
+Note these renders show a single suspended box fixture at a corridor intersection, not
+the current wall. They are 2016-era and superseded by the v2/v3 maps.
 
 ---
 
 ## Reading these files on Linux
 
-The XML is UTF-16LE with a BOM, so most tools need a conversion first:
+UTF-16LE with a BOM, so most tools need a conversion first:
 
 ```sh
 iconv -f UTF-16LE -t UTF-8 "resources/Shows/Stargate v3 - Pacman.map" | less
 ```
 
-## Gaps
+Python handles it directly with `open(path, encoding='utf-16-le')` — strip the leading
+`\ufeff`.
 
-Open questions that block a replacement app, roughly in priority order.
+---
 
-**1. Ethernet keypad protocol — the one real unknown.**
-`LSM_UserGuide.pdf` documents only the *serial* keypad (Appendix D: Serial Keypad
-Protocol). For the Antumbra **Ethernet** keypad it points at
-`www.colorkinetics.com/ls/controllers/enetkeypad/`, a dead URL. There is no keypad
-config file anywhere in `resources/` — only a `KeypadConfigTool` shortcut. Since
-keypad triggering is core to how the installation is actually used, resolve this
-early: capture traffic from the working keypad, or run `KeypadConfigTool` under the
-existing LSC install and watch what it sends.
+## Open questions
 
-**2. KiNET wire format not specified here.**
-The guide establishes that KiNET is Philips Color Kinetics' Ethernet protocol and
-that the system is UDP-based, but does not print packet layouts. Commonly cited as
-UDP port 6038 — *treat that as unverified*; confirm by capturing traffic from the
-working LSM before building against it. Also unresolved: whether output is addressed
-per-controller (4 packets/frame) or per-port (64 packets/frame, 216 B each).
-`Light System Composer/Installer 1.8.6/Utilities/` contains `KinetInterfaceConfigTool`
-and `PDSTool` shortcuts, which are the best pointers to the configuration surface.
+**1. Does LSC import a hand-written `.sho`?** The `.pck` files are named
+`LSE-Database-Export`, hinting that shows live in a database and `.sho` is an export
+format. The whole pipeline depends on import being faithful. Test by hand-editing one
+value in `PacMan.sho` and loading it.
 
-**3. Encrypted database exports.**
-The two `Shows/Backups/LSE-Database-Export*.pck` files are `openssl enc` salted
-blobs. Contents unknown without LSC. May hold schedules and keypad bindings — worth
-revisiting if (1) stays blocked.
+**2. Does `Animation` map pixels 1:1 at `scale` 1 with `smooth` 0?** Every existing
+animation is upscaled with `smooth` 1, so the LSM is demonstrably resampling in the
+only known-good case. Confirm that native-resolution frames pass through untouched.
 
-**4. Gap width between the two ceiling strips is unmeasured.**
-The strip layout itself is settled (see *Physical layout* above), but the map encodes
-no gap, so we don't know how far apart the strips are in units of the 24-unit pixel
-pitch. That number is what a WYSIWYG preview gutter needs, and it determines how badly
-full-height content reads when bisected. Measure in the room, or recover it from
-`Concept/Module Diagram.xlsx`.
-
-Also unrecorded: which strip is physically which side, and whether either run is
+**3. Strip orientation.** The map records which *rows* belong to which strip, but not
+which strip is physically which side of the corridor, nor whether either run is
 mounted reversed end-to-end. Light one module at a time to establish orientation
 before trusting the canvas as WYSIWYG.
 
-**5. Concept renders are stale.**
-[Concept/](resources/Concept/) shows a single suspended box fixture at a corridor
-intersection, not the current wall. Those files are from 2016; the v2/v3 Stargate
-maps supersede them.
+**4. Physical gap width.** The 36-unit row pitch between rows 11 and 12 marks the seam
+but does not measure it. The preview gutter needs a real number — measure in the room,
+or recover it from `Concept/Module Diagram.xlsx`.
+
+### Archived
+
+Relevant only if the LSM is ever replaced, which is not the current plan:
+
+- **Ethernet keypad protocol.** `LSM_UserGuide.pdf` documents only the *serial* keypad
+  (Appendix D). For the Antumbra **Ethernet** keypad it points at a dead URL, and there
+  is no keypad config file anywhere in `resources/` — only a `KeypadConfigTool`
+  shortcut.
+- **KiNET wire format.** Not printed in the guide. Commonly cited as UDP port 6038;
+  unverified. `KinetInterfaceConfigTool` and `PDSTool` are the best pointers to the
+  configuration surface.
+- **Encrypted database exports.** The two `.pck` files may hold schedules and keypad
+  bindings.
