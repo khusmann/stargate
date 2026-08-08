@@ -44,6 +44,26 @@ multi-core ARM. The risks worth engineering against are operational:
 - **SD card wear** is the top killer of always-on Pis. Boot from USB SSD or an A2
   card, logs on tmpfs, consider read-only root.
 
+## Physical layout
+
+The wall is **two long strips running along either side of the ceiling**, each 192 x
+12 pixels (32 modules long, 2 modules wide). The 192 x 24 canvas stacks them:
+
+| Strip | Canvas rows | Controllers |
+|---|---|---|
+| A | 0–11 | `CTRL-A` (cols 0–95) + `CTRL-B` (cols 96–191) |
+| B | 12–23 | `CTRL-C` (cols 0–95) + `CTRL-D` (cols 96–191) |
+
+Each port drives one 6 x 12 cross-section — 2 modules stacked across a strip's full
+width — so port boundaries run crosswise along each strip.
+
+This shapes the authoring model: content spanning all 24 rows is **bisected by the
+ceiling gap**, appearing as two halves on opposite sides of the corridor. Treat the
+canvas as two bands that happen to share a timeline, give the preview a gutter between
+rows 11 and 12, and make mirroring across the corridor axis a first-class operation —
+the existing Warp Tunnel art ships every chevron in both normal and `(rev)` form for
+exactly this reason.
+
 ## Scale
 
 192 x 24 = 4,608 pixels, 30 fps. One frame is 13.8 KB; the full wall is ~415 KB/s

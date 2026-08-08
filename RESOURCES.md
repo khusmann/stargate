@@ -28,8 +28,39 @@ Derived by parsing `Shows/Stargate v3 - Pacman.map`:
 | Logical canvas | **192 x 24** (192 unique X positions, 24 unique Y) |
 | Coordinate units | 24 per pixel; X 60→4644, Y 84→636, Z always 0 |
 
+### Physical layout: two ceiling strips
+
+The wall is **two long strips running along either side of the ceiling**. The map
+does not record this — every node has `z=0` and an identical orientation quaternion,
+and X/Y are evenly spaced with no gaps — so the 192x24 canvas is a *logical*
+unwrapping of two physically separate runs.
+
+The split is by **row band**, not column:
+
+| Strip | Canvas rows | Controllers | Size |
+|---|---|---|---|
+| A (one ceiling side) | 0–11 | `CTRL-A` (cols 0–95) + `CTRL-B` (cols 96–191) | 192 x 12 |
+| B (other ceiling side) | 12–23 | `CTRL-C` (cols 0–95) + `CTRL-D` (cols 96–191) | 192 x 12 |
+
+Each strip is 32 modules long by 2 modules wide (16:1). Each controller drives half a
+strip's length; each port drives one **6 x 12 cross-section** — 2 modules stacked
+across the strip's full width. That a port maps to a complete cross-section is the
+structural confirmation that the strip is 12 px wide: the alternative column-split
+reading gives 96 x 24 blocks at only 4:1, which is not strip-shaped and would cut
+ports in half.
+
+**Consequence for content.** The canvas is two stacked strips, so anything drawn
+across the full 24 rows is **bisected by the ceiling gap** — top 12 rows appear on one
+side of the corridor, bottom 12 on the other, separated by however many feet of
+ceiling. The map has no notion of that gap (Y runs continuously 84→636), so a
+faithful preview needs a gutter inserted between rows 11 and 12. This explains why
+`Warp Tunnel Images/` ships every chevron in both normal and `(rev)` form: the two
+strips need content mirrored about the corridor axis to read symmetrically from
+below.
+
 That 192x24 canvas is the single most important number in this repo — the image and
-video assets below are all authored to that aspect ratio (~8:1).
+video assets are all authored to it (the PacMan master is 191x47, i.e. the canvas at
+~2x vertical stretch for editing).
 
 ---
 
@@ -198,25 +229,16 @@ The two `Shows/Backups/LSE-Database-Export*.pck` files are `openssl enc` salted
 blobs. Contents unknown without LSC. May hold schedules and keypad bindings — worth
 revisiting if (1) stays blocked.
 
-**4. Physical layout is not recorded in the map.**
-The `.map` is a flat 192x24 canvas: every node has `z=0` and an identical orientation
-quaternion, and X is evenly spaced with no gaps. So the file cannot tell you how the
-wall is physically arranged. The wiring does split cleanly in half, which is
-consistent with two separate runs:
+**4. Gap width between the two ceiling strips is unmeasured.**
+The strip layout itself is settled (see *Physical layout* above), but the map encodes
+no gap, so we don't know how far apart the strips are in units of the 24-unit pixel
+pitch. That number is what a WYSIWYG preview gutter needs, and it determines how badly
+full-height content reads when bisected. Measure in the room, or recover it from
+`Concept/Module Diagram.xlsx`.
 
-| Controller | Columns | Rows |
-|---|---|---|
-| `CTRL-A` | 0–95 (left half) | top 12 |
-| `CTRL-C` | 0–95 (left half) | bottom 12 |
-| `CTRL-B` | 96–191 (right half) | top 12 |
-| `CTRL-D` | 96–191 (right half) | bottom 12 |
-
-Two sPDS units per half, boundary exactly at column 96. If the halves are physically
-on opposite walls facing each other, content authored on the flat canvas runs
-continuously through that seam — down one wall and back along the other — and will
-read *reversed* on one side unless the show compensates. That `Warp Tunnel Images/`
-ships every chevron in both normal and `(rev)` form is suggestive but not proof.
-Confirm against the room before trusting the canvas as WYSIWYG.
+Also unrecorded: which strip is physically which side, and whether either run is
+mounted reversed end-to-end. Light one module at a time to establish orientation
+before trusting the canvas as WYSIWYG.
 
 **5. Concept renders are stale.**
 [Concept/](resources/Concept/) shows a single suspended box fixture at a corridor
