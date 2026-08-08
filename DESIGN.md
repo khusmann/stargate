@@ -94,6 +94,23 @@ single-file artifact and is acceptable there.
 Show scripts are plain JS at runtime even though the app is TypeScript, so the JS
 language mode is the right one.
 
+**Type hints come from a hand-written `stargate.d.ts`** — the declarations for `pixel`,
+`draw`, `rgb`, `hsl`, `load`, and `ctx`. That file is the single source of truth for
+three consumers at once: editor completions and hover docs, the **Copy AI prompt**
+payload, and the human documentation. A `.d.ts` is a compact and precise API description,
+which is exactly what an LLM reads best — so the artifact that makes the editor helpful is
+the same one that makes generated shows correct.
+
+For v1, drive CodeMirror's completions from it directly. The API is ~10 symbols, which is
+the size where a hand-written completion source with `info` strings wins outright.
+
+Running a real TypeScript language service in the browser (`@typescript/vfs` plus the
+compiler) would add inline diagnostics — catching `ctx.beginPath()` or a bare `sin()`
+before you press play. It is the obvious upgrade, but it costs ~1.5–2 MB gzipped against
+CodeMirror's ~100–130 KB, and the feedback loop here is already sub-second: hot reload
+renders 4,608 pixels instantly and the gutter marks the throwing line. Defer it until the
+API outgrows a hand-written list.
+
 **Error handling pairs with this.** `pixel` runs 4,608 times a frame, so a throw must not
 spam — catch the first, halt the render, mark the line, and leave the last good frame on
 screen.
@@ -163,13 +180,14 @@ bands already share a physical direction inside the script's coordinate space.
 
 ### The prompt is the spec
 
-The API reference and the **Copy AI prompt** payload are the same document. If the surface
-doesn't fit in ~100 lines of pasted context it is too big — an API an AI can't hold in one
-prompt is one it will hallucinate against.
+The API reference, the editor's type hints, and the **Copy AI prompt** payload are all the
+same artifact: `stargate.d.ts` plus a worked example. If the surface doesn't fit in ~100
+lines of pasted context it is too big — an API an AI can't hold in one prompt is one it
+will hallucinate against.
 
 That constraint is doing real work: it is why `pixel` is one function rather than a
-library, and why `draw` documents a handful of calls even though the full Canvas API is
-technically reachable.
+library, why `draw` documents a handful of calls even though the full Canvas API is
+technically reachable, and why a hand-written completion source is currently enough.
 
 ## Preview
 
@@ -316,8 +334,8 @@ on this wall.
   workflow is video-based; there is an OpenShot project in `resources/`.
 - **Is the LSC machine online?** The hosted path needs it once. If not, fall back to the
   single-file release artifact and zip export.
-- Do show scripts get type hints? A `.d.ts` for `pixel`/`draw`/`rgb`/`hsl` fed to
-  CodeMirror's autocomplete would help both authors, but it is not needed for v1.
+- When does `stargate.d.ts` outgrow a hand-written completion source and justify the
+  TypeScript language service? Revisit if the API passes ~15 symbols.
 - The chevron art is 52x24 drawn at `starty` 12 for *both* groups — one full-height shape
   each 12-row group clips in half, so a `>` puts `\` on one wall and `/` on the other.
   Worth knowing whether that was meant to read as depth from inside the corridor before
