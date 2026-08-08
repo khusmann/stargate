@@ -173,8 +173,52 @@ iconv -f UTF-16LE -t UTF-8 "resources/Shows/Stargate v3 - Pacman.map" | less
 
 ## Gaps
 
-- The `.pck` database exports are encrypted; their contents are unknown without LSC.
-- Nothing here documents the wire protocol directly (KiNET) — that has to come from
-  `LSM_UserGuide.pdf` or from capturing traffic.
-- The Antumbra Ethernet keypad is in the hardware list but has no config file in
-  `resources/`; only the `KeypadConfigTool` shortcut references it.
+Open questions that block a replacement app, roughly in priority order.
+
+**1. Ethernet keypad protocol — the one real unknown.**
+`LSM_UserGuide.pdf` documents only the *serial* keypad (Appendix D: Serial Keypad
+Protocol). For the Antumbra **Ethernet** keypad it points at
+`www.colorkinetics.com/ls/controllers/enetkeypad/`, a dead URL. There is no keypad
+config file anywhere in `resources/` — only a `KeypadConfigTool` shortcut. Since
+keypad triggering is core to how the installation is actually used, resolve this
+early: capture traffic from the working keypad, or run `KeypadConfigTool` under the
+existing LSC install and watch what it sends.
+
+**2. KiNET wire format not specified here.**
+The guide establishes that KiNET is Philips Color Kinetics' Ethernet protocol and
+that the system is UDP-based, but does not print packet layouts. Commonly cited as
+UDP port 6038 — *treat that as unverified*; confirm by capturing traffic from the
+working LSM before building against it. Also unresolved: whether output is addressed
+per-controller (4 packets/frame) or per-port (64 packets/frame, 216 B each).
+`Light System Composer/Installer 1.8.6/Utilities/` contains `KinetInterfaceConfigTool`
+and `PDSTool` shortcuts, which are the best pointers to the configuration surface.
+
+**3. Encrypted database exports.**
+The two `Shows/Backups/LSE-Database-Export*.pck` files are `openssl enc` salted
+blobs. Contents unknown without LSC. May hold schedules and keypad bindings — worth
+revisiting if (1) stays blocked.
+
+**4. Physical layout is not recorded in the map.**
+The `.map` is a flat 192x24 canvas: every node has `z=0` and an identical orientation
+quaternion, and X is evenly spaced with no gaps. So the file cannot tell you how the
+wall is physically arranged. The wiring does split cleanly in half, which is
+consistent with two separate runs:
+
+| Controller | Columns | Rows |
+|---|---|---|
+| `CTRL-A` | 0–95 (left half) | top 12 |
+| `CTRL-C` | 0–95 (left half) | bottom 12 |
+| `CTRL-B` | 96–191 (right half) | top 12 |
+| `CTRL-D` | 96–191 (right half) | bottom 12 |
+
+Two sPDS units per half, boundary exactly at column 96. If the halves are physically
+on opposite walls facing each other, content authored on the flat canvas runs
+continuously through that seam — down one wall and back along the other — and will
+read *reversed* on one side unless the show compensates. That `Warp Tunnel Images/`
+ships every chevron in both normal and `(rev)` form is suggestive but not proof.
+Confirm against the room before trusting the canvas as WYSIWYG.
+
+**5. Concept renders are stale.**
+[Concept/](resources/Concept/) shows a single suspended box fixture at a corridor
+intersection, not the current wall. Those files are from 2016; the v2/v3 Stargate
+maps supersede them.
