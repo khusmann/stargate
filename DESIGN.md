@@ -32,8 +32,8 @@ export function pixel(x, y, t) { ... }
 ```
 
 Everything downstream is generated. There is no PNG-directory input format, no
-`show.toml`, and no separate path for non-programmers — a dropped folder of images is an
-*asset* a script loads, not an alternate way in.
+`show.toml`, and no separate path for non-programmers — images and video are *assets* a
+script loads (see [Assets](#assets)), not an alternate way in.
 
 This deletes the entire input-validation surface. Frame size, count, numbering, and
 zero-padding cannot be wrong, because nothing outside the tool produces them. The canvas
@@ -189,6 +189,65 @@ That constraint is doing real work: it is why `pixel` is one function rather tha
 library, why `draw` documents a handful of calls even though the full Canvas API is
 technically reachable, and why a hand-written completion source is currently enough.
 
+## Assets
+
+There is no server to upload to — Pages is static. So the app reads assets off the user's
+own disk, using the same File System Access API the export already needs.
+
+### A project is a folder
+
+Pick a working directory once with `showDirectoryPicker()`. The app reads `show.js` and
+any assets from it, and writes `frames/` and `Show.sho` back into it. The handle persists
+in IndexedDB, so returning to the URL reopens the same project behind one permission
+click.
+
+```
+Warp Tunnel/
+  show.js
+  chevron.png
+  clip.mp4
+  frames/          ← generated
+  Show.sho         ← generated
+```
+
+`load("chevron.png")` resolves against that folder, exactly like a normal build tool. The
+browser app ends up behaving like a local one: the project is a real directory you can
+zip, commit, or point `animationdir` straight at.
+
+**This qualifies "a show is a script."** A pure `pixel()` show is still one portable file.
+A show with assets is a folder — the script alone won't run without them. That is the
+honest trade for having assets at all, and it degrades gracefully rather than all at once.
+
+**Fallback: drag-and-drop into memory.** Non-Chromium browsers, or quick experiments with
+no folder set up. Dropped files go into a `Map<name, Blob>` backed by IndexedDB so they
+survive a reload. Same `load()` API; the difference is only where bytes come from.
+
+### Video
+
+Decode **once at import**, downscale to 192x24 immediately, and keep the frames in memory.
+The target resolution is what makes this work: 937 frames at 192x24 RGBA is ~17 MB, and
+even a five-minute clip is ~166 MB. A 173 MB source video becomes a small array.
+
+```js
+const clip = await loadVideo("clip.mp4");
+
+export function draw(ctx, t) {
+  ctx.drawImage(clip.at(t), 0, 0);
+}
+```
+
+`clip.at(t)` is then an array lookup, so live preview is instant and the bake costs
+nothing. Decoding is the slow part and it happens once, with a progress bar.
+
+Two decode paths: **WebCodecs** (`VideoDecoder`, plus a demuxer) runs at hundreds of
+frames per second and matches the Chromium-only stance already taken for export; a
+seek-and-`drawImage` loop on a `<video>` element is the universal fallback, correct but
+tens of milliseconds per frame.
+
+This is also where the old `fit`/aspect question lands, and it lands as ordinary code —
+`ctx.drawImage(clip.at(t), 0, 0, 192, 24)` stretches, and any other framing is arithmetic
+the author writes and sees immediately. No config key, no default to get wrong.
+
 ## Preview
 
 Two strips, drawn as two bars with real space between them:
@@ -286,8 +345,9 @@ Output is a `.sho` plus a directory of PNG frames.
 - **`.sho`** — UTF-16LE with BOM and CRLF (see [RESOURCES.md](RESOURCES.md)). One
   `Meta Effect` containing one `Animation`.
 - **`animationdir`** is an absolute Windows path (`G:/My Drive/Fuse Live Arts/Artwork/
-  Stargate/...`). It is a property of the LSC machine, not of a show — set once in the UI
-  and remembered in `localStorage`.
+  Stargate/...`). The browser cannot read the real path from a directory handle, so the
+  user types the project folder's Windows path once and it is remembered in
+  `localStorage` — a property of the LSC machine, not of a show.
 
 Fixed by the animation contract, not configurable: `gid` 4999 (`All (front)`), `scale` 1,
 `smooth` 0, `preload` 0, `xoffset`/`yoffset` 0, `transenabled` 0. `end` is derived —
@@ -327,11 +387,6 @@ on this wall.
 
 ## Open questions
 
-- **Video as an asset?** Video was cut because it meant an `ffmpeg` dependency. In a
-  browser that reason is gone — a `<video>` element plus `drawImage` extracts frames for
-  free. As an *asset* rather than an input format it adds no config surface, since scaling
-  becomes ordinary code (`ctx.drawImage(clip.at(t), 0, 0, 192, 24)`). Your friend's
-  workflow is video-based; there is an OpenShot project in `resources/`.
 - **Is the LSC machine online?** The hosted path needs it once. If not, fall back to the
   single-file release artifact and zip export.
 - When does `stargate.d.ts` outgrow a hand-written completion source and justify the

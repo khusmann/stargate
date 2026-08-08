@@ -59,9 +59,15 @@ export function draw(ctx, t)   { ... }   // imperative — composites on top
 `(uv, time) → rgb` is both the smaller surface and the stronger AI prior for this kind of
 content. `draw` handles sprites. Define either or both.
 
-There is no PNG-directory input and no `show.toml` — images are *assets* a script loads,
-not an alternate way in. That deletes the entire input-validation surface: frame size,
-count, and numbering cannot be wrong when nothing outside the tool produces them.
+There is no PNG-directory input and no `show.toml` — images and video are *assets* a
+script loads, not an alternate way in. That deletes the entire input-validation surface:
+frame size, count, and numbering cannot be wrong when nothing outside the tool produces
+them.
+
+A **project is a folder** on disk, opened once with `showDirectoryPicker()` and remembered
+in IndexedDB: `show.js` plus its assets in, `frames/` and `Show.sho` out. `load()` resolves
+against it. Video decodes once at import, downscaled to 192 x 24 and held in memory — 937
+frames is ~17 MB — so `clip.at(t)` is an array lookup and preview stays instant.
 
 Non-programmers author via a **Copy AI prompt** button that hands any assistant the full
 authoring context; the API reference and that prompt are the same document.
