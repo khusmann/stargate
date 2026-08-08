@@ -135,7 +135,7 @@ PATTERNS = [
 
 # --- .sho -----------------------------------------------------------------
 
-def sho(smooth: int, total_ms: int) -> bytes:
+def sho(smooth: int, total_ms: int, animdir: str = ANIMDIR) -> bytes:
     """One Meta Effect containing one Animation, matching PacMan.sho exactly."""
     lines = [
         "<effect>",
@@ -184,7 +184,7 @@ def sho(smooth: int, total_ms: int) -> bytes:
         "<endlinkstart>1</endlinkstart>",
         "<endlinkoffset>0</endlinkoffset>",
         "<endcyclecount>1</endcyclecount>",
-        f"<animationdir>{ANIMDIR}</animationdir>",
+        f"<animationdir>{animdir}</animationdir>",
         "<preload>0</preload>",
         f"<fps>{FPS}</fps>",
         "<xoffset>0</xoffset>",
@@ -222,6 +222,13 @@ def main():
         p = OUT / f"Stargate Test (smooth {smooth}).sho"
         p.write_bytes(sho(smooth, total_ms))
         print(f"wrote {p.name}")
+
+    # Does <animationdir> have to be absolute? Every existing show uses an
+    # absolute Windows path, but nothing proves relative fails. If it works,
+    # exports become portable and there is no path to configure.
+    p = OUT / "Stargate Test (relative path).sho"
+    p.write_bytes(sho(0, total_ms, animdir="frames"))
+    print(f"wrote {p.name}")
 
     print(f"\n{n} frames, {total_ms} ms, {FPS} fps")
     print(f"animationdir: {ANIMDIR}")

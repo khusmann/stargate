@@ -3,8 +3,8 @@
 A short test show for the wall. It answers four questions we can't answer from the
 files alone, and it should take about ten minutes at the LSC machine.
 
-It's an 18 second loop of 9 patterns, 2 seconds each. There are two `.sho` files that
-are **identical except for one setting** — play both and compare.
+It's an 18 second loop of 9 patterns, 2 seconds each. There are three `.sho` files —
+the first two are **identical except for one setting**, so play both and compare.
 
 ## Setup
 
@@ -22,6 +22,11 @@ are **identical except for one setting** — play both and compare.
 2. Load `Stargate Test (smooth 0).sho` in Light System Composer and play it.
 
 3. Then load `Stargate Test (smooth 1).sho` and play that.
+
+4. Last, load `Stargate Test (relative path).sho`. This one is a long shot — it points
+   at the frames without spelling out the full `G:/...` path. **We expect it to fail**,
+   and that's fine; we just need to know. If it plays, say so, because it would save us
+   a setting later.
 
 ## What to look for
 
@@ -58,6 +63,7 @@ If both files look the same, tell us that too — it's just as informative.
 2. Which end was white, and which side of the room was green? (a photo of each is
    perfect)
 3. For each of the two files: were the stripes crisp or washed out?
-4. Anything that looked broken, dead, or backwards.
+4. Did the third file (relative path) play, or not?
+5. Anything that looked broken, dead, or backwards.
 
 That's it. Thank you — this unblocks basically everything else.
