@@ -74,7 +74,7 @@ never run in the browser.
 
 ### The UI is an editor and a drop target
 
-- **Write JS** in an editor pane, hot-reloading onto the preview
+- **Write JS** in a **CodeMirror 6** pane, hot-reloading onto the preview
 - **Drop assets** — images a script can load
 - **Copy AI prompt** — puts the full authoring context on the clipboard (API reference,
   ceiling geometry, a worked example, the constraints). Paste into any assistant, get a
@@ -82,6 +82,21 @@ never run in the browser.
 
 The prompt button is how a non-programmer uses this. It replaces the folder-drop path
 that earlier drafts treated as the friend's entry point.
+
+**Why CodeMirror rather than a `<textarea>`.** The AI workflow means routinely pasting
+large blobs of unfamiliar code, which is exactly where a textarea is worst — no
+highlighting to sanity-check against, no folding, no structure. And the payoff is
+**inline error markers**: when a generated show throws, the gutter points at the line.
+esbuild is already in the build, so bundling `@codemirror/lang-javascript` plus basic
+setup costs nothing but bytes (~100–130 KB gzipped), which matters only to the offline
+single-file artifact and is acceptable there.
+
+Show scripts are plain JS at runtime even though the app is TypeScript, so the JS
+language mode is the right one.
+
+**Error handling pairs with this.** `pixel` runs 4,608 times a frame, so a throw must not
+spam — catch the first, halt the render, mark the line, and leave the last good frame on
+screen.
 
 ## The JS API
 
@@ -301,8 +316,8 @@ on this wall.
   workflow is video-based; there is an OpenShot project in `resources/`.
 - **Is the LSC machine online?** The hosted path needs it once. If not, fall back to the
   single-file release artifact and zip export.
-- Editor pane: CodeMirror, or a `<textarea>` with error output? Probably the textarea
-  first.
+- Do show scripts get type hints? A `.d.ts` for `pixel`/`draw`/`rgb`/`hsl` fed to
+  CodeMirror's autocomplete would help both authors, but it is not needed for v1.
 - The chevron art is 52x24 drawn at `starty` 12 for *both* groups — one full-height shape
   each 12-row group clips in half, so a `>` puts `\` on one wall and `/` on the other.
   Worth knowing whether that was meant to read as depth from inside the corridor before
