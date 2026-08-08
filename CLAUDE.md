@@ -38,51 +38,55 @@ format. Hand-edit one value in `PacMan.sho`, load it, see if the change takes.
 
 ## Tooling
 
-A single Go binary, plain HTML/JS, no build step.
+A **single-page web app** — client-side TypeScript, bundled by one `esbuild` command into
+one HTML file. No server, no binary, no install: a hosted URL, or a file you open.
 
+A browser beats an `.exe` on "nothing to install" (every Windows box has Edge, and a URL
+doesn't have to get past SmartScreen), it already has Canvas and a PNG encoder so most of
+a native implementation would be reimplementation, and V8 makes per-pixel JS free. A
+headless CLI stays available later without a rewrite — the same TS runs under Node.
+
+**A show is a script.** One input format, a `.js` file carrying its own metadata:
+
+```js
+export const name = "Warp Tunnel", fps = 30, seconds = 31;
+
+export function pixel(x, y, t) { ... }   // shader — fills the frame
+export function draw(ctx, t)   { ... }   // imperative — composites on top
 ```
-stargate build   [dir | show.toml | show.js]   # headless, scriptable
-stargate preview [dir | show.toml | show.js]   # localhost server + browser, watch & reload
-stargate                                       # no args: open the UI
-```
 
-Go cross-compiles to `windows/amd64`, so the deliverable is one `.exe` on the LSC
-machine with no runtime to install — a non-programmer is a first-class user here, and
-double-clicking the exe opens the UI because that user has no argv. `//go:embed` bakes
-in the UI. **Pure stdlib, zero cgo, no external dependencies** — nothing resamples, so
-there is no image library, and there is no video ingest, so there is no `ffmpeg`.
+`pixel` is primary: 4,608 pixels is small enough that per-pixel JS is cheap, and
+`(uv, time) → rgb` is both the smaller surface and the stronger AI prior for this kind of
+content. `draw` handles sprites. Define either or both.
 
-Procedural shows are embedded JavaScript ([goja](https://github.com/dop251/goja), pure
-Go): scripts rather than compiled programs, so they hot-reload in the preview and the
-same binary serves both authors. JS specifically because an AI can write it — which
-helps the non-programmer most.
+There is no PNG-directory input and no `show.toml` — images are *assets* a script loads,
+not an alternate way in. That deletes the entire input-validation surface: frame size,
+count, and numbering cannot be wrong when nothing outside the tool produces them.
 
-A show defines `pixel(x, y, t)` (fragment-shader style, the primary API — 4,608 pixels is
-small enough that per-pixel JS is cheap), `draw(ctx, t)` (imperative, for sprites), or
-both, in which case `pixel` fills and `draw` composites on top.
+Non-programmers author via a **Copy AI prompt** button that hands any assistant the full
+authoring context; the API reference and that prompt are the same document.
 
 ## Authoring flow
 
 ```
-frames/    ─┐
-show.js    ─┼─→  validate + bake  ─→  build/Show.sho + frames/  ─→  drop on the LSC box
-show.toml  ─┘                              ↓
-                                   preview (two strips, zoom, pan, scrub)
+show.js  ─→  run  ─→  preview (two strips, zoom, pan, scrub)
+                 ↓
+             export  ─→  Show.sho + frames/  ─→  straight to G: on the LSC box
 ```
 
-Two audiences: I author procedurally (shows as code, rendered to frames); my friend
-drops in a directory of PNGs, or writes JS in the UI editor — with a **Copy AI prompt**
-button that hands any assistant the full authoring context.
+Open the Pages URL on the LSC machine and export with the File System Access API — https
+is a secure context, so `showDirectoryPicker()` works and frames land directly in
+`G:/My Drive/...`. Zip download is the fallback for non-Chromium browsers. Hosting also
+means deploys are a git push and nobody runs a stale copy.
 
-**Reject, don't resample.** Input frames must be exactly 192 x 24 or the build fails.
-The old pipeline hand-rendered four 937-frame directories off one video and lost track of
-them: two are mislabeled (the dir named `10x` holds 4x frames, `3x` holds 10x) and one
-has 936 frames instead of 937. And every master is 191 x 47 where its target region
-(`Front (center)`, 96 x 24) wants an exact multiple — 192 x 48 — so every render was a
-fractional downscale, with the LSM doing the final ~20x reduction itself at `smooth` 1.
-The quality problem they chased with sharpness settings was an off-by-one in the master.
-Requiring native size makes the resampling question disappear rather than giving people
-knobs to tune it with; resizing belongs in the editor that made the frames.
+**The script is the source of truth.** The old pipeline hand-rendered four 937-frame
+directories off one video and lost track of them: two are mislabeled (the dir named `10x`
+holds 4x frames, `3x` holds 10x) and one has 936 frames instead of 937. Every master is
+191 x 47 where its target region (`Front (center)`, 96 x 24) wanted an exact multiple —
+192 x 48 — so every render was a fractional downscale, with the LSM doing the final ~20x
+reduction itself at `smooth` 1. The quality problem they chased with sharpness settings
+was an off-by-one. A script is reproducible by construction; a rendered folder is a claim
+you have to trust.
 
 **Preview fidelity is the product.** Show Designer's timeline already works; what it
 can't show is that the canvas is two physically separate runs on opposite walls.
