@@ -145,9 +145,8 @@ rows as one image.** A shape drawn across rows 10–13 has its top half on one w
 bottom half on the other, separated by the width of the room. The 192x24 canvas is a
 transport container for two independent 192x12 shows that share a timeline.
 
-That promotes `ctx.band()` from a helper to the normal way to draw, and makes `ctx.copy()`
-the main compositional tool — near-symmetry between the two walls is the one relationship
-a person can actually perceive.
+So near-symmetry between the two walls is the one relationship a person can actually
+perceive, and making it easy is the point: `y % 12` in `pixel`, or `ctx.copy()` in `draw`.
 
 ### Strip orientation: the runs are antiparallel
 
@@ -189,63 +188,82 @@ hand and got wrong four times.
 
 ## The JS API
 
-The drawing API is a deliberate **subset of Canvas 2D**. Not because Canvas is the ideal
-shape for a 192x24 grid, but because every model has an enormous prior on it — AI-generated
-shows land closer to working on the first try, and neither author has to learn anything.
+Two entry points. A show defines either or both:
 
 ```js
 // show.js
 const fps = 30;
 const seconds = 10;
 
-function draw(ctx, t, frame) {
-  ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, 192, 24);
+function pixel(x, y, t) { ... }   // shader — fills the frame
+function draw(ctx, t)   { ... }   // imperative — composites on top
+```
 
-  ctx.fillStyle = `hsl(${t * 60}, 100%, 50%)`;
-  ctx.fillRect((t * 40) % 192, 0, 8, 24);
+If both are defined, `pixel` runs first and `draw` composites over the result. That
+layering is the common shape for a real show: a procedural background with a logo on it.
+
+### `pixel` — the primary API
+
+One pure function per pixel, fragment-shader style. Return a packed 24-bit color.
+
+```js
+function pixel(x, y, t) {
+  const wave = Math.sin(x * 0.05 - t * 3) * 0.5 + 0.5;
+  return hsl((x * 2 + t * 60) % 360, 1, wave * 0.5);
 }
 ```
 
-`draw` is called once per frame. `t` is seconds, `frame` is the 0-based index.
+`x` is 0–191, `y` is 0–23, `t` is seconds. Return `rgb(r,g,b)` (0–255), `hsl(h,s,l)`
+(h 0–360, s/l 0–1), or a bare `0xRRGGBB` literal. Packed integers, not strings or arrays —
+at 4.3M calls per bake, a per-pixel allocation is the one thing that would actually hurt.
 
-**Surface** — state: `fillStyle`, `globalAlpha`. Ops: `fillRect`, `clearRect`,
-`drawImage(img, x, y)`. Assets: `load("logo.png")`. Constants: `ctx.width` (192),
-`ctx.height` (24).
-
-Colors accept `#rgb`, `#rrggbb`, `rgb()`, `hsl()`.
-
-**Deliberately excluded:** paths, beziers, `arc`, text, gradients, transforms. At 24px
-tall, most of them don't survive the grid anyway, and every addition is something the AI
-prompt has to explain.
-
-### Band helpers
-
-The canvas is two physically separate ceiling strips, bisected by the corridor gap
-(rows 0–11 one side, 12–23 the other). That's first-class:
+Bands need no API here. `y < 12` is the Right strip and `y >= 12` is the Left, and making
+both walls identical is one line:
 
 ```js
-ctx.band("right")         // clip subsequent draws to rows 0-11
-ctx.band("left")          // rows 12-23
-ctx.band(null)            // both
-ctx.copy("right→left")    // duplicate one band onto the other
+function pixel(x, y, t) { return band(x, y % 12, t); }
 ```
 
-Named for the strips rather than for screen position, since "top" and "bottom" are an
-artifact of how the preview stacks them and mean nothing in the room.
+**Why this is primary.** 4,608 pixels is small enough that per-pixel JS is affordable —
+absurd at 1080p, unremarkable here. And for the content this wall wants (plasmas, waves,
+tunnels, color cycling on a 16:1 strip) the Shadertoy corpus is enormous and is exactly
+`(uv, time) → rgb`, so it is the stronger AI prior *and* the smaller surface: one
+signature, no state machine, no draw order.
 
-`copy` is a straight duplicate, **not** a mirror: the antiparallel reversal is applied by
-the emitter (above), so within the JS coordinate space both bands already share the same
-physical direction. Author once, copy, done.
+### `draw` — for sprites and discrete shapes
+
+Where a shader is clumsy: blitting the existing image assets (`PacMan Logo.png`,
+`Ready!.png`, the chevrons), and anything with hard edges you'd rather place than derive.
+
+```js
+const logo = load("PacMan Logo.png");
+
+function draw(ctx, t) {
+  ctx.drawImage(logo, (t * 40) % 192, 0);
+}
+```
+
+**Surface** — state: `fillStyle`, `globalAlpha`. Ops: `fillRect`, `clearRect`,
+`drawImage(img, x, y)`. Bands: `ctx.band("right"|"left"|null)` to clip,
+`ctx.copy("right→left")` to duplicate. Constants: `ctx.width` (192), `ctx.height` (24).
+
+Bands are named for the strips, not for screen position — "top" and "bottom" are an
+artifact of how the preview stacks them and mean nothing in the room. `copy` is a straight
+duplicate, **not** a mirror: the emitter applies the antiparallel reversal, so both bands
+already share a physical direction inside the JS coordinate space.
+
+**Deliberately excluded:** paths, beziers, `arc`, text, gradients, transforms. Gradients
+and anything continuous belong in `pixel`; the rest mostly doesn't survive a 12-row band.
 
 ### The prompt is the spec
 
-The API reference and the **Copy AI prompt** payload are the same document. If the
-surface doesn't fit in ~100 lines of pasted context, it's too big — an API an AI can't
-hold in one prompt is one it will hallucinate against.
+The API reference and the **Copy AI prompt** payload are the same document. If the surface
+doesn't fit in ~100 lines of pasted context, it's too big — an API an AI can't hold in one
+prompt is one it will hallucinate against.
 
-That constraint is doing real work: it's the reason the Canvas subset is small, and it
-should be the tiebreaker on every future addition.
+That constraint is doing real work: it is why `pixel` is one function rather than a
+library, why `draw` stays this small now that `pixel` carries everything continuous, and
+it should be the tiebreaker on every future addition.
 
 ## Config
 
@@ -305,56 +323,14 @@ internally. Native-size passthrough has never been observed on this wall.
 
 ## Open questions
 
-- **Canvas 2D or a shader model?** Currently unresolved, and it is the biggest remaining
-  design question. See below.
+- **Benchmark goja on a per-pixel callback before building `pixel`.** The shader API rests
+  on one unverified number: 4,608 px x 937 frames = 4.3M calls per bake, and ~138K
+  calls/sec to hold 30 fps live. Both should be comfortable for a tree-walking interpreter
+  at this size, but the whole design leans on it. An afternoon's measurement. If it comes
+  in slow, the fallbacks are a coarser `pixel` grid for live preview only, or moving the
+  hot path into Go.
 - Does the editor pane need a real code editor (CodeMirror, embedded) or is a `<textarea>`
   with error output enough for v1? Probably the textarea.
-
-### Open: Canvas 2D, or a shader model?
-
-The API above is a Canvas 2D subset. The alternative is a fragment-shader shape — one
-pure function, called per pixel:
-
-```js
-function pixel(x, y, t) {
-  const wave = Math.sin(x * 0.05 - t * 3) * 0.5 + 0.5;
-  return hsl((x * 2 + t * 60) % 360, 1, wave * 0.5);
-}
-```
-
-**Leaning: shader-first.** Three reasons.
-
-*The resolution makes it affordable.* 4,608 pixels is nothing. A 937-frame bake is 4.3M
-calls — single-digit seconds in goja — and live preview needs ~138K calls/sec to hold
-30 fps, which is comfortably within a tree-walking interpreter at this size. Per-pixel JS
-would be absurd at 1080p and is unremarkable here. **This is load-bearing and unverified:
-benchmark goja on a per-pixel callback before committing.** It reverses an earlier
-assumption in this doc that per-pixel would be too slow.
-
-*It is the better AI prior.* The Canvas 2D argument was that models know the API. But for
-*this kind of content* — plasmas, waves, tunnels, color cycling, noise fields on a 16:1
-strip — the Shadertoy corpus is enormous and is exactly `(uv, time) → rgb`. "Cool demo on
-an LED strip" sits closer to that training distribution than to `fillRect`.
-
-*The surface is one line.* One function signature, no state machine, no draw order, no
-`fillStyle` to forget. That is the smallest possible thing to fit in a pasted prompt,
-which is the constraint this design already committed to.
-
-**Where it loses:** sprites and text. The existing assets are images — `PacMan Logo.png`,
-`Ready!.png`, `Player One.png`, the chevrons — and sampling a texture from a per-pixel
-function is clumsier than blitting it.
-
-**Likely resolution: both, as alternate entry points.** A show exports whichever it
-needs; the runner picks based on which is defined.
-
-```js
-function pixel(x, y, t) { ... }   // shader — the default, best for demos
-function draw(ctx, t)   { ... }   // imperative — for logos, sprites, discrete shapes
-```
-
-That costs one extra concept in the prompt and keeps the imperative surface tiny, since
-`draw` no longer has to carry gradients or anything continuous. Build `pixel` first — it
-is a day of work and it is where the demos come from.
 - [RESOURCES.md](RESOURCES.md) gap 4 (corridor width) is no longer load-bearing — the
   preview's gap is a fixed visual separator. Gap 3 (orientation) is now half-answered: the
   runs are antiparallel; only the two absolute flips remain.

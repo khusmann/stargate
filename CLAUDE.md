@@ -57,6 +57,10 @@ Go): scripts rather than compiled programs, so they hot-reload in the preview an
 same binary serves both authors. JS specifically because an AI can write it — which
 helps the non-programmer most.
 
+A show defines `pixel(x, y, t)` (fragment-shader style, the primary API — 4,608 pixels is
+small enough that per-pixel JS is cheap), `draw(ctx, t)` (imperative, for sprites), or
+both, in which case `pixel` fills and `draw` composites on top.
+
 ## Authoring flow
 
 ```
