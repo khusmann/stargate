@@ -302,8 +302,25 @@ Output is a `.sho` plus a directory of PNG frames.
 - **`.sho`** — UTF-16LE with BOM and CRLF (see [RESOURCES.md](RESOURCES.md)). One
   `Meta Effect` containing one `Animation`.
 - **`animationdir`** is an absolute Windows path (`G:/My Drive/Fuse Live Arts/Artwork/
-  Stargate/...`). A browser cannot learn a real filesystem path, so the user types it once
-  and it is remembered in `localStorage` — a property of the LSC machine, not of a show.
+  Stargate/...`) — assuming the spike confirms relative paths don't work. A browser cannot
+  learn a real filesystem path and cannot verify one, so this is the one exported value
+  that can be silently wrong. It is a property of the LSC machine, not of a show, so it is
+  configured once and kept in `localStorage`.
+
+  Four things make that survivable, in order of how much they help:
+
+  1. **Prefill the known root.** Every existing show lives under `G:/My Drive/Fuse Live
+     Arts/Artwork/Stargate/Shows/`. Default to it and append the show name, so the zip
+     extracts to `My Show/` there and the common case needs no configuration at all.
+  2. **Read it from an existing `.sho`.** Dragging in `PacMan.sho` and parsing its
+     `<animationdir>` is ~20 lines and takes the value from ground truth on the user's own
+     machine. "Drop in a show that already works" is answerable by someone who could not
+     answer "type your asset root".
+  3. **Print the expected path** in the export dialog and in a README inside the zip.
+     Verification is impossible, so the requirement has to be unmissable at the moment
+     they extract.
+  4. **Document the symptom.** A wrong path almost certainly plays black rather than
+     erroring usefully.
 
 Fixed by the animation contract, not configurable: `gid` 4999 (`All (front)`), `scale` 1,
 `smooth` 0, `preload` 0, `xoffset`/`yoffset` 0, `transenabled` 0. `end` is derived —
