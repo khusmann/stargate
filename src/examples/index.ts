@@ -1042,6 +1042,433 @@ export function draw(ctx, t) {
 }
 `;
 
+const tumbler = `export const name = "Tumbler", fps = 30, seconds = 20;
+
+// Solid objects, with surfaces that face a direction and catch a light.
+//
+// The other three-dimensional shows here are projections: the tunnel is an
+// analytic mapping, the fractal is fog accumulated along a ray. Nothing in
+// either has a *surface*. This one sphere-traces a scene and shades what it
+// hits, which is the whole of real-time 3D minus the hardware.
+//
+// Sphere tracing: map() returns a lower bound on the distance from a point to
+// the nearest surface, so a ray can jump exactly that far knowing it cannot
+// pass through anything. Repeat, and it converges on the first hit in a few
+// dozen steps — no triangles, no depth buffer, and an infinite lattice of
+// cubes costs the same as one cube, because the lattice is a modulo.
+//
+// Once you have the hit point, the normal is the gradient of that same
+// distance field — four extra samples — and once you have a normal you have
+// diffuse, specular, and rim, which is everything that makes a shape read as
+// solid rather than as a bright patch.
+//
+// The camera is where this differs from the tunnel and the fractal. Those two
+// squash the vertical field of view hard, which turns the strip into a slot and
+// is exactly right for something with no real scale. Cubes have a scale: stretch
+// the vertical axis and every cube renders as a plank. So the frustum here is
+// the wall's own 16:1 aspect ratio, near enough — FOVX / FOVY ≈ 15 — and the
+// strip stops being a squashed picture and becomes a genuinely wide one. Things
+// pass above and below the frame the way they would out of a car window.
+const CX = 6.6;                // lattice spacing across the corridor
+const CZ = 2.9;                // ... and along it
+const FILL = 0.66;             // fraction of cells holding a cube — the empty
+                               // ones are what put black between the objects
+const TRIPS = 14;              // cells flown per loop — an integer, so the
+                               // field is back where it started at the wrap
+const YAWS = 3;                // whole turns of yaw per loop
+const PITCHES = 2;             // ... and of pitch
+const ORBITS = 2;              // laps of the lamp around the camera, per loop
+const SIZE = 0.5;              // cube half-extent, before the per-cube scaling
+const ROUND = 0.12;
+const BIGGEST = SIZE * 1.4 + ROUND;
+const CLEAR = Math.min(CX, CZ) / 2 - BIGGEST;   // see map()
+const STEPS = 64;
+const HIT = 0.006;
+const FAR = 42;
+const FOVX = 1.7;
+const FOVY = 0.115;
+const LANE = CX / 2;           // the camera flies down the gap between columns
+const LAG = 0.5;               // the far wall is half a lap behind
+const KX = -0.39, KY = 0.78, KZ = -0.49;        // key light, unit, from behind
+
+function hash(x, y) {
+  let h = Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+// Blinn-Phong: brightness of the highlight from a light along (lx, ly, lz).
+// The halfway vector between the light and the eye — and the eye direction is
+// -r, since r points away from the camera.
+function blinn(nx, ny, nz, rx, ry, rz, lx, ly, lz, power) {
+  const wx = lx - rx, wy = ly - ry, wz = lz - rz;
+  const wl = Math.sqrt(wx * wx + wy * wy + wz * wz) + 1e-6;
+  return Math.max(0, (nx * wx + ny * wy + nz * wz) / wl) ** power;
+}
+
+// Distance to the nearest cube. Called ~70 times per pixel, so it is written
+// flat and allocates nothing — this one function is the entire frame budget.
+function map(px, py, pz, ca, sa, cb, sb) {
+  // Fold all of space into one cell. Rounding rather than flooring keeps the
+  // cell centred on the object, so the point stays near the thing it is
+  // measuring the distance to.
+  const ix = Math.round(px / CX);
+  const iz = Math.round(pz / CZ);
+  const izw = ((iz % TRIPS) + TRIPS) % TRIPS;   // period TRIPS: the loop
+
+  // Two decorrelated values from one hash — a second imul chain per step is
+  // real money at this call count.
+  const h = hash(ix, izw);
+  const g = (h * 7919) % 1;
+
+  const lx = px - ix * CX;
+  const lz = pz - iz * CZ;
+
+  // Folding space is a lie, and this is the line that makes it honest. The box
+  // distance below only accounts for *this* cell's cube; a point near a cell
+  // wall may be closer to the next one along, and a ray that trusts the larger
+  // number tunnels straight through it. But every cube is at least CLEAR inside
+  // its own cell, so nothing outside this cell can be nearer than the distance
+  // to the cell wall plus CLEAR. Take the smaller of the two and the bound is
+  // true everywhere — no fudge factor on the step size, and empty cells are
+  // crossed in one jump instead of a hundred.
+  const bound = Math.min(CX / 2 - Math.abs(lx), CZ / 2 - Math.abs(lz)) + CLEAR;
+  if (g > FILL) return bound;
+
+  // Yaw then pitch, with the sin negated on alternate cells so neighbours
+  // tumble opposite ways. The angles are the same for every cube, which is the
+  // point: their sines are computed once per pixel instead of once per step.
+  const ly = py - (h - 0.5) * 1.8;              // cubes hang at different heights
+  const s = (ix + izw) & 1 ? -sa : sa;
+  const ax = lx * ca - lz * s;
+  const az = lx * s + lz * ca;
+  const by = ly * cb - az * sb;
+  const bz = ly * sb + az * cb;
+
+  // Rounded box, exact: distance outside the slab intersection, plus the
+  // negative interior term, minus the corner radius.
+  const size = SIZE * (0.65 + (g / FILL) * 0.75);
+  const qx = Math.abs(ax) - size;
+  const qy = Math.abs(by) - size;
+  const qz = Math.abs(bz) - size;
+  const ox = Math.max(qx, 0), oy = Math.max(qy, 0), oz = Math.max(qz, 0);
+  const box = Math.sqrt(ox * ox + oy * oy + oz * oz)
+            + Math.min(Math.max(qx, Math.max(qy, qz)), 0)
+            - ROUND;
+  return Math.min(box, bound);
+}
+
+export function pixel(x, y, t) {
+  const wall = y < 12 ? 0 : 1;
+  const p = t / seconds;
+
+  // Unit ray through this pixel. Unit matters: sphere tracing advances by a
+  // distance in world units, and a direction longer than 1 oversteps surfaces.
+  const ux = (x - 95.5) / 96;
+  const uy = ((y % 12) - 5.5) / 5.5;
+  let rx = ux * FOVX, ry = uy * FOVY, rz = 1;
+  const rl = Math.sqrt(rx * rx + ry * ry + 1);
+  rx /= rl; ry /= rl; rz /= rl;
+
+  // Both walls fly the same corridor, half a lap apart, so the cube that just
+  // swept past you on one side is arriving on the other.
+  const camx = LANE;
+  const camz = (p + wall * LAG) * TRIPS * CZ;
+
+  const yaw = p * Math.PI * 2 * YAWS;
+  const pitch = p * Math.PI * 2 * PITCHES;
+  const ca = Math.cos(yaw), sa = Math.sin(yaw);
+  const cb = Math.cos(pitch), sb = Math.sin(pitch);
+
+  // A lamp orbiting the camera, whole laps per loop. A light fixed to the
+  // camera would light every cube identically; this one rakes across them.
+  const phi = p * Math.PI * 2 * ORBITS;
+  const lampx = camx + Math.cos(phi) * 3.2;
+  const lampy = Math.sin(phi) * 1.6;
+  const lampz = camz + 2.5;
+
+  // The march. Jump the full distance every time — the bound in map() is a real
+  // one — and stop when the step gets small enough to call it a surface.
+  let d = 0.05;
+  let hit = -1;
+  let closest = 9;
+  let closeAt = FAR;
+  for (let i = 0; i < STEPS; i++) {
+    const s = map(camx + rx * d, ry * d, camz + rz * d, ca, sa, cb, sb);
+    if (s < closest) { closest = s; closeAt = d; }
+    if (s < HIT) { hit = d; break; }
+    d += s;
+    if (d > FAR) break;
+  }
+
+  let r = 0, g = 0, b = 0;
+
+  if (hit >= 0) {
+    // Where it landed. The camera sits at y = 0, which is why that term is bare.
+    const hx = camx + rx * hit, hy = ry * hit, hz = camz + rz * hit;
+
+    // The normal is the gradient of the field. Four taps on a tetrahedron
+    // rather than six on the axes — same answer, two fewer evaluations.
+    const e = 0.008;
+    const d1 = map(hx + e, hy - e, hz - e, ca, sa, cb, sb);
+    const d2 = map(hx - e, hy - e, hz + e, ca, sa, cb, sb);
+    const d3 = map(hx - e, hy + e, hz - e, ca, sa, cb, sb);
+    const d4 = map(hx + e, hy + e, hz + e, ca, sa, cb, sb);
+    let nx = d1 - d2 - d3 + d4;
+    let ny = -d1 - d2 + d3 + d4;
+    let nz = -d1 + d2 - d3 + d4;
+    const nl = Math.sqrt(nx * nx + ny * ny + nz * nz) + 1e-9;
+    nx /= nl; ny /= nl; nz /= nl;
+
+    // Two lights, doing two different jobs. The key is directional, so it does
+    // not fall off and a cube stays legible however far down the corridor it
+    // is; the lamp is a point light that only reaches the near ones, which is
+    // what makes a cube brighten as it arrives.
+    let lx = lampx - hx, ly = lampy - hy, lz = lampz - hz;
+    const ld = Math.sqrt(lx * lx + ly * ly + lz * lz) + 1e-6;
+    lx /= ld; ly /= ld; lz /= ld;
+    const atten = 1 / (1 + ld * ld * 0.05);
+
+    const keyDiff = Math.max(0, nx * KX + ny * KY + nz * KZ);
+    const lampDiff = Math.max(0, nx * lx + ny * ly + nz * lz) * atten;
+
+    const keySpec = blinn(nx, ny, nz, rx, ry, rz, KX, KY, KZ, 30);
+    const lampSpec = blinn(nx, ny, nz, rx, ry, rz, lx, ly, lz, 44) * atten;
+
+    // Rim: surfaces turned away from the eye. On a wall made of LEDs this is
+    // what actually draws the silhouette — a lit edge reads as an edge where a
+    // shaded face does not.
+    const rim = (1 - Math.max(0, -(nx * rx + ny * ry + nz * rz))) ** 3;
+    const fog = Math.exp(-hit * 0.065);
+
+    // Body colour per cube from the same hash the geometry uses, so a cube
+    // keeps its colour all the way down the corridor. hsl() picks the hue, and
+    // everything else is added on top in rgb — a highlight is the colour of the
+    // light, not a brighter body, and tinting it with the body colour is the
+    // classic way to make everything look like plastic.
+    const cell = hash(Math.round(hx / CX), ((Math.round(hz / CZ) % TRIPS) + TRIPS) % TRIPS);
+    const base = hsl(188 + cell * 104, 0.85, 0.5);
+    const cr = ((base >> 16) & 255) / 255;
+    const cg = ((base >> 8) & 255) / 255;
+    const cb2 = (base & 255) / 255;
+
+    // The bodies are cool and the lamp is warm, so a highlight reads as a
+    // highlight rather than as a brighter cube.
+    const lit = keyDiff * 0.95 + lampDiff * 1.8 + 0.08 + 0.12 * Math.max(0, ny);
+    r = (cr * lit + keySpec * 0.5 + lampSpec * 2 + rim * 0.1) * fog;
+    g = (cg * lit + keySpec * 0.5 + lampSpec * 1.75 + rim * 0.16) * fog;
+    b = (cb2 * lit + keySpec * 0.55 + lampSpec * 1.3 + rim * 0.24) * fog;
+  } else {
+    // Missed rays are not wasted: how close the ray came is a free soft halo,
+    // which keeps a silhouette from stepping hard from lit to black at twelve
+    // pixels tall. Faded by the depth it came closest at, or the far end of the
+    // corridor draws itself as a field of outlines.
+    const halo = Math.exp(-closeAt * 0.16) / (1 + closest * closest * 30);
+    r = halo * 0.1;
+    g = halo * 0.17;
+    b = halo * 0.3;
+  }
+
+  return rgb(r * 255, g * 255, b * 255);
+}
+`;
+
+const colonnade = `export const name = "Colonnade", fps = 30, seconds = 20;
+
+// Actual 3D, rather than a pattern that suggests it: rays are intersected with
+// solid matter and the surface they land on is shaded from its own normal. That
+// is what buys the things a screen-space effect cannot fake — pillars occluding
+// each other, a highlight crawling across a face as you pass it, edges that go
+// dark because they are turned away from the light.
+//
+// Three decisions make a 16:1 strip twelve rows tall the right screen for it.
+//
+// The lens is cylindrical: the ray for column x leaves the eye at angle theta,
+// not through a flat film plane. A flat 143-degree lens would smear the pillars
+// at the ends of the wall into unreadable wedges — the tangent runs away — while
+// a panoramic one sweeps them past at a constant rate the whole way across.
+//
+// The subject is architecture, so it is vertical. Pillars running floor to
+// ceiling still read when they are four pixels wide; anything compact does not.
+//
+// And the two strips are one flight looking opposite ways — forward down the
+// corridor on one wall, back the way you came on the other. That is a rotation
+// of the camera (both x and z negate), never a mirror of the image: the exporter
+// owns the physical reversal, and mirroring here would fight it. It is also the
+// honest answer to two walls nobody can see at once — not one picture cut in
+// half, but two windows out of the same moving room.
+//
+// It loops because the eye advances CELLS whole cells and the scene is exactly
+// periodic in z with period SPACING, so the last frame is flying through the
+// same geometry as the first; sway, bob, lamp pulse and hue are whole cycles.
+const TAU = Math.PI * 2;
+const SPACING = 4;             // world units between pillars
+const CELLS = 24;              // pillars passed per loop — the loop condition
+const HALL = 2.6;              // pillars stand at |x| = HALL
+const PILLAR = 0.5;            // half-thickness
+const ROUND = 0.1;
+const OUTER = 4;               // side walls behind the colonnade
+const FLOOR = -1.6;
+const CEIL = 2.4;
+const STRIP = 1.15;            // the two ceiling light strips, at |x| = STRIP
+const HFOV = 1.25;             // horizontal half-angle: 143 degrees across
+const VFOV = 0.5;              // vertical, as a slope rather than an angle
+const STEPS = 40;
+const FAR = 44;
+
+function box(px, py, pz, hx, hy, hz) {
+  const qx = Math.abs(px) - hx, qy = Math.abs(py) - hy, qz = Math.abs(pz) - hz;
+  const ax = Math.max(qx, 0), ay = Math.max(qy, 0), az = Math.max(qz, 0);
+  const outside = Math.sqrt(ax * ax + ay * ay + az * az);
+  return outside + Math.min(Math.max(qx, qy, qz), 0) - ROUND;
+}
+
+// The whole colonnade, as a distance. Two folds do all the work: Math.abs on x
+// turns one pillar into a matched pair, and the modulo on z turns that pair into
+// an endless row. Both are exact here — the pillar sits centred in its cell, so
+// the nearest copy is always the one in the cell you are standing in, which is
+// what makes it safe to march at full step length.
+function map(px, py, pz) {
+  const mz = pz - Math.floor(pz / SPACING) * SPACING - SPACING / 2;
+  const pillar = box(Math.abs(px) - HALL, py - (FLOOR + CEIL) / 2, mz,
+                     PILLAR, (CEIL - FLOOR) / 2, PILLAR);
+  return Math.min(pillar, OUTER - Math.abs(px));
+}
+
+export function pixel(x, y, t) {
+  const p = t / seconds;
+  const row = y % 12;
+  const back = y >= 12;
+
+  // The light is the ceiling strips, and they are the only light: everything
+  // here is lit by two lines running the length of the corridor, which is what
+  // the room this plays in actually looks like. The colour turns once per loop.
+  const hue = p * TAU;
+  const lr = 0.58 + 0.42 * Math.sin(hue);
+  const lg = 0.58 + 0.42 * Math.sin(hue + 2.0944);
+  const lb = 0.58 + 0.42 * Math.sin(hue + 4.1888);
+
+  // Sway and bob at two and three cycles: enough that it reads as a camera
+  // carried down the corridor rather than a slide on a rail.
+  const ex = Math.sin(p * TAU * 2) * 0.3;
+  const ey = Math.sin(p * TAU * 3) * 0.12;
+  const ez = p * CELLS * SPACING;
+
+  let dx = Math.sin(((x - 95.5) / 96) * HFOV);
+  let dz = Math.cos(((x - 95.5) / 96) * HFOV);
+  let dy = -((row - 5.5) / 5.5) * VFOV;
+  const inv = 1 / Math.sqrt(1 + dy * dy);      // dx*dx + dz*dz is already 1
+  dx *= inv; dy *= inv; dz *= inv;
+  if (back) { dx = -dx; dz = -dz; }
+
+  // Floor and ceiling are solved, not marched. A ray nearly parallel to a plane
+  // is the one case sphere tracing handles badly — the steps go to nothing and
+  // it stalls short of the surface, which on a strip this shallow would eat the
+  // horizon, where most of the depth lives. One divide gives the exact hit.
+  const up = dy > 0;
+  let plane = FAR;
+  if (dy < -1e-3) plane = (FLOOR - ey) / dy;
+  else if (dy > 1e-3) plane = (CEIL - ey) / dy;
+  if (plane > FAR) plane = FAR;
+
+  let s = 0.02;
+  let hit = false;
+  for (let i = 0; i < STEPS; i++) {
+    const d = map(ex + dx * s, ey + dy * s, ez + dz * s);
+    if (d < 0.002 + s * 0.001) { hit = true; break; }   // epsilon grows with
+    s += d;                                             // distance: a far
+    if (s >= plane) break;                              // surface is subpixel
+  }
+
+  let r = 0, g = 0, b = 0;
+  const dist = hit ? s : plane;
+
+  if (hit) {
+    const px = ex + dx * s, py = ey + dy * s, pz = ez + dz * s;
+
+    // Normal from four taps of the field rather than six. The tetrahedron
+    // trick: sample at the corners of a tetrahedron and the offsets themselves
+    // are the basis, so the gradient falls out of one weighted sum.
+    const h = 0.008;
+    const d1 = map(px + h, py - h, pz - h);
+    const d2 = map(px - h, py - h, pz + h);
+    const d3 = map(px - h, py + h, pz - h);
+    const d4 = map(px + h, py + h, pz + h);
+    let nx = d1 - d2 - d3 + d4;
+    let ny = -d1 - d2 + d3 + d4;
+    let nz = -d1 + d2 - d3 + d4;
+    const nl = 1 / Math.sqrt(nx * nx + ny * ny + nz * nz);
+    nx *= nl; ny *= nl; nz *= nl;
+
+    // Nearest point on the nearest strip is straight across in z, so the light
+    // vector is a two-dimensional problem: the strips are infinite lines.
+    let lx = (px > 0 ? STRIP : -STRIP) - px;
+    let ly = CEIL - py;
+    const r2 = lx * lx + ly * ly;
+    const li = 1 / Math.sqrt(r2);
+    lx *= li; ly *= li;
+
+    const fall = 1 / (1 + r2 * 0.12);
+    const diff = Math.max(0, nx * lx + ny * ly) * fall;
+
+    let hx = lx - dx, hy = ly - dy, hz = -dz;
+    const hi = 1 / Math.sqrt(hx * hx + hy * hy + hz * hz);
+    const spec = Math.pow(Math.max(0, (nx * hx + ny * hy + nz * hz) * hi), 24) * fall;
+
+    // Rim light. At four pixels wide a pillar is mostly silhouette, and the one
+    // term that draws a silhouette is the one that peaks where the surface turns
+    // away from the eye.
+    const rim = Math.pow(Math.max(0, 1 + nx * dx + ny * dy + nz * dz), 3);
+
+    const wall = OUTER - Math.abs(px) < 0.05;
+    const albedo = wall ? 0.16 : 0.42;
+    const pulse = 0.65 + 0.35 * Math.sin(pz * TAU / 16);
+    const v = albedo * (0.05 + diff * 1.5 * pulse) + spec * 0.7 * pulse + rim * 0.16;
+    r = v * lr; g = v * lg; b = v * lb;
+  } else if (plane < FAR) {
+    const px = ex + dx * plane, pz = ez + dz * plane;
+    const off = Math.abs(Math.abs(px) - STRIP);
+    const pulse = 0.65 + 0.35 * Math.sin(pz * TAU / 16);
+
+    if (up) {
+      // The strips themselves: a hot core and a wide halo standing in for the
+      // bloom a real lens would add. They converge on the vanishing point, which
+      // is the strongest perspective cue in the frame.
+      const core = Math.max(0, 1 - off / 0.13);
+      const halo = 1 / (1 + (off / 0.5) * (off / 0.5));
+      const v = 0.02 + (core * core * 2.4 + halo * 0.4) * pulse;
+      r = v * lr; g = v * lg; b = v * lb;
+    } else {
+      // Floor: two pools of light under the strips, and lines across it every
+      // half cell. The lines widen with distance — a fixed-width line thinner
+      // than a pixel aliases into a dashed mess, and this wall has few enough
+      // pixels that it would be the first thing you noticed.
+      const lane = 1 / (1 + (off / 0.85) * (off / 0.85));
+      const f = pz / 2 - Math.floor(pz / 2);
+      const edge = Math.min(f, 1 - f);
+      const w = 0.02 + plane * 0.004;
+      const line = Math.max(0, 1 - edge / w);
+      const v = 0.02 + lane * 0.5 * pulse + line * 0.18;
+      r = v * lr; g = v * lg; b = v * lb;
+    }
+  }
+
+  // Fog in the lamp colour, so the far end of the corridor glows instead of
+  // going black — and so the horizon, where the geometry gets subpixel, fades
+  // out before it can shimmer.
+  const fog = 1 - Math.exp(-dist * 0.085);
+  r = r * (1 - fog) + lr * 0.05 * fog;
+  g = g * (1 - fog) + lg * 0.05 * fog;
+  b = b * (1 - fog) + lb * 0.05 * fog;
+
+  return rgb(
+    Math.min(1, r) ** 0.85 * 255,
+    Math.min(1, g) ** 0.85 * 255,
+    Math.min(1, b) ** 0.85 * 255,
+  );
+}
+`;
+
 export const EXAMPLES: Example[] = [
   {
     id: "plasma",
@@ -1150,6 +1577,18 @@ export const EXAMPLES: Example[] = [
     name: "Fluid",
     blurb: "Curl noise plus backward advection — flow with no state to store.",
     source: fluid,
+  },
+  {
+    id: "tumbler",
+    name: "Tumbler",
+    blurb: "Sphere-traced cubes with real normals — diffuse, specular, rim, fog.",
+    source: tumbler,
+  },
+  {
+    id: "colonnade",
+    name: "Colonnade",
+    blurb: "Raymarched solids with real normals and lights. Forward on one wall, back the way you came on the other.",
+    source: colonnade,
   },
 ];
 
