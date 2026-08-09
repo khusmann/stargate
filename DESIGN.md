@@ -295,7 +295,23 @@ walls, with no mirrored assets and no per-effect compensation.
 
 ## Export
 
-Output is a `.sho` plus a directory of PNG frames.
+**The frames are the product. The `.sho` is a convenience.**
+
+Generating a `.sho` does not bypass Show Designer — either way a human opens it there and
+downloads the show to the LSE. The `.sho` saves about seven clicks of form-filling, not a
+workflow step. The vendor's documented path (`Creating Shows.pdf`, Animation Setup Steps)
+is: Browse to a directory of graphic files, click **Load**.
+
+Emit it anyway, for a reason that isn't convenience: it locks in `smooth` 0, `scale` 1,
+`gid` 4999 and `fps`. Those are precisely the settings that went wrong before —
+`PacMan.sho` ships `smooth` 1 — and a hand-filled form is where that recurs.
+
+The consequence is that **risk gate 1 is not load-bearing.** If Show Designer refuses a
+hand-written `.sho`, we lose seven clicks, not the architecture. It also means the
+`animationdir` problem below disappears entirely on the manual path, since the user picks
+the folder in a native dialog and it is correct by construction.
+
+Output is therefore a `.sho` plus a directory of PNG frames.
 
 - **PNG frames** — `canvas.toBlob()` per frame, named `frame-%05d.png`, 1-based, matching
   the export convention already in use.
@@ -386,12 +402,14 @@ native workflow.
 
 ## Risk gates
 
-Both are unresolved, both are cheap, neither should wait.
+Gate 2 is the one that matters — there is no workaround for it. Gate 1 turned out to be
+recoverable. Both are cheap; neither should wait.
 
-**1. Does LSC import a hand-written `.sho`?** The backups are named
-`LSE-Database-Export`, which hints shows live in a database and `.sho` is an export
-format. Hand-edit one value in `PacMan.sho`, load it, see if the change takes. If `.sho`
-is import-only-in-theory, the whole tool changes shape.
+**1. Does Show Designer open a hand-written `.sho`?** *Downgraded — a convenience, not a
+blocker.* `Creating Shows.pdf` says light shows "downloaded to the LSE must be saved as
+show (.SHO) files", so `.sho` is the intended interchange format rather than a one-way
+dump, which is encouraging. But if it refuses ours, the frames still load by hand and we
+lose only the pre-filled settings.
 
 **2. Does `smooth 0` at native size pass pixels through 1:1?** In the one known-good case
 the LSM is doing a ~20x downscale internally — `PacMan.sho` points at 1910x470 frames with

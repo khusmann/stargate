@@ -29,10 +29,22 @@ setting**, so play both and compare.
    and that's fine; we just need to know. If it plays, say so, because it would save us
    a setting later.
 
-## What to look for
+## If the .sho files won't load
 
-**If the show won't load or import at all, stop there — that by itself is the most
-useful thing you could tell us.**
+Tell us — that's useful on its own. But **please don't stop there**, because the
+patterns still answer the more important question. Build it by hand instead:
+
+1. Show Designer → load the usual `.map`
+2. New Effect → **Animation**
+3. Group: **All (front)**
+4. Browse to the `frames` folder → **Load**
+5. Set **fps 30**, **scale 1**, and make sure **smooth is OFF**
+6. Play it — then repeat with **smooth ON** and compare
+
+That comparison is the whole point of the two `.sho` files, so doing it manually gets
+us the same answer.
+
+## What to look for
 
 Otherwise, here's the loop in order. Each pattern holds for 5 seconds, so there's time
 to get a photo. The patterns at 20–35 s are the ones where a photo really helps.

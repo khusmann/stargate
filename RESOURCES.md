@@ -178,6 +178,39 @@ acting as the container/timeline. Each effect carries a 21-field envelope — `t
 (`G:/My Drive/Fuse Live Arts/Artwork/Stargate/...`). Everything else is parametric,
 rendered inside the LSM.
 
+### How a show reaches the wall
+
+From `Creating Shows.pdf`:
+
+```
+Show Designer (PC, part of LSC)  →  .sho  →  downloaded to the LSE  →  LSM plays it
+                                                                    →  KiNET → sPDS → LEDs
+```
+
+> "Once your light show is complete, save it for use in the LSE. Light shows **downloaded
+> to the LSE must be saved as show (.SHO) files.**"
+
+So `.sho` is the *required interchange format* into the LSE, not merely an export — which
+is the seam the authoring tool targets. "LSE" is what the `LSE-Database-Export` `.pck`
+files are exports of.
+
+The Animation workflow (Chapter 6, *Animation Setup Steps*) is: choose Animation → pick a
+group → Browse to the directory of graphic files → **Load** → set fps → set X-Y offset and
+scale. There is an explicit ingest step, and LSC accepts `.PNG`, `.XPM`, `.JPG`, `.BMP`.
+
+Two consequences:
+
+- **`animationdir` only has to be valid on the LSC machine when the show is loaded** — not
+  at playback. The LSM is an appliance that cannot mount a Windows `G:` drive, so the
+  frames must travel with the show on download. (Inferred, not documented.)
+- **A show can always be built by hand from frames alone**, which is why generating `.sho`
+  is a convenience rather than a dependency.
+
+Note also that the doc tells authors to insert "the animation template you created with
+Management Tool" as a layer — so `Animation Template.png` (765 x 93) is a **Management Tool
+output**, not a chosen authoring size. The vendor's own template is not an exact multiple
+of 192 x 24, which may be where the off-by-one masters came from.
+
 ---
 
 ## `resources/` tree
@@ -286,10 +319,11 @@ Python handles it directly with `open(path, encoding='utf-16-le')` — strip the
 
 ## Open questions
 
-**1. Does LSC import a hand-written `.sho`?** The `.pck` files are named
-`LSE-Database-Export`, hinting that shows live in a database and `.sho` is an export
-format. The whole pipeline depends on import being faithful. Test by hand-editing one
-value in `PacMan.sho` and loading it.
+**1. Does Show Designer open a hand-written `.sho`?** *Downgraded.* `Creating Shows.pdf`
+establishes that `.sho` is the required format for downloading a show to the LSE, so it is
+an interchange format rather than a one-way dump. And frames can always be loaded by hand
+(Browse → Load), so a refusal costs pre-filled settings, not the pipeline. Still worth
+testing, but it is no longer load-bearing.
 
 **2. Does `Animation` map pixels 1:1 at `scale` 1 with `smooth` 0?** In the only
 known-good case the LSM is doing a **~20x downscale** internally — `PacMan.sho` points at
