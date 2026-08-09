@@ -35,8 +35,8 @@ Each controller drives exactly one quadrant (1,152 px = 12 rows x 96 cols):
 | `CTRL-C` | 12–23 | 0–95 |
 | `CTRL-D` | 12–23 | 96–191 |
 
-Real serials and IP addresses are deliberately not recorded in this repository. They
-are in the `.map` file under `resources/` (untracked) if you need them.
+Serials and IP addresses are deliberately not recorded in this repository, which is
+public. They are in `resources/NETWORK.md` (untracked), and in the `.map` itself.
 
 ### Physical layout: two ceiling strips
 
