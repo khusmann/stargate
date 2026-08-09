@@ -59,14 +59,14 @@ Three rules that matter:
 for the editor's completions, the human docs, and the **Copy AI prompt** button
 — which puts a complete authoring brief on the clipboard for any assistant.
 
-Sixteen worked examples ship in the picker, from a four-line plasma to a
+Eighteen worked examples ship in the picker, from a four-line plasma to a
 volumetric fractal. They double as the test suite.
 
 ## The preview
 
-Two strips with a fixed screen-space gap, integer zoom only (4x–10x),
-nearest-neighbour. A column ruler along the bottom marks column 96, the
-controller seam, and the ends of the wall.
+Two strips with a fixed screen-space gap, integer zoom only, nearest-neighbour.
+A column ruler along the bottom marks column 96, the controller seam, and the
+ends of the wall.
 
 **Two pixel modes.** *LEDs* is the default: round emitters on a dark pitch, the
 gap about the size of an emitter, which is what the ceiling actually is. *Flat*
@@ -86,15 +86,24 @@ the halo is that colour at lower alpha, so an author judging output levels is
 judging the real ones. Boosting the colours to match the flat view would have
 been the easy fix and the wrong one. Export is untouched either way.
 
-The zoom ladder starts at 4x because below it an emitter and its gap would be
-one screen pixel each, and the whole wall is only 384 px at 2x anyway.
+**Zoom.** The ladder is 4x / 6x / 8x / 10x — it starts at 4x because below that
+an emitter and its gap would be one screen pixel each. `fit` is not restricted
+to the ladder: it takes the largest whole number of screen pixels per wall pixel
+the window allows, up to 16x. That matters at both ends. Restricted to the
+ladder it left 580 px of dead space on an ultrawide (10x fits, but so does 13x)
+and overflowed by 400 px on a phone, where even 4x does not fit. Below 4x the
+emitter view is unreadable, so it falls back to flat squares on its own and the
+LEDs button disables itself.
 
-Panning is a scroll container. Note two deliberate departures from *Preview* in
-DESIGN.md, both made at the bench: there is **no overview bar**, and the
-horizontal **scrollbar sits above** the strips rather than below, as a second
-scroll container synced to the real one. A rotate hack would have put a 3D
-transform under the canvases, and resampled pixels are the one thing this
-preview cannot afford.
+Panning is a plain scroll container, with a native scrollbar that appears only
+when there is something to scroll. Note one deliberate departure from *Preview*
+in DESIGN.md, made at the bench: there is **no overview bar**. It would earn its
+place if the viewport showed a small fraction of the wall, but it does not —
+even at 8x in a 900 px window you can see 54% of the columns, and a full-width
+overview of all 192 would be about 8 px per column, the zoom you are already at.
+
+On a phone held upright a banner suggests turning it sideways, which is the
+difference between 1x and 4x.
 
 ## Export
 

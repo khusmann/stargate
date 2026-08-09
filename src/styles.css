@@ -154,10 +154,6 @@ button[aria-pressed="true"] {
     justify-content: flex-start;
   }
 
-  .status {
-    flex-basis: 100%;
-  }
-
   /* The scrubber needs the full width to be usable with a thumb; the buttons
      sit above it. */
   .transport {
@@ -258,10 +254,37 @@ button[aria-pressed="true"] {
   line-height: 1.35;
 }
 
+/* Floats over the app rather than sitting in a row, so a message that lasts
+   two seconds cannot push the preview down and back up again. */
 .status {
-  color: #8fd08f;
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  z-index: 40;
+  max-width: min(520px, calc(100vw - 28px));
+  padding: 8px 15px;
+  border-radius: 999px;
+  border: 1px solid #2f4a35;
+  background: #16211a;
+  color: #9fdb9f;
   font-size: 13px;
-  margin-right: 4px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  animation: status-in 140ms ease-out;
+}
+
+@keyframes status-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status {
+    animation: none;
+  }
 }
 
 .progress {
@@ -274,6 +297,38 @@ button[aria-pressed="true"] {
   height: 100%;
   background: var(--accent);
   transition: width 120ms linear;
+}
+
+/* Hidden everywhere except a phone held upright, where it is actually true. */
+.rotate-hint {
+  display: none;
+}
+
+@media (max-width: 760px) and (orientation: portrait) {
+  .rotate-hint {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: none;
+    margin: 10px 14px 0;
+    padding: 8px 10px;
+    border: 1px solid #2a3a52;
+    border-radius: 8px;
+    background: #121a26;
+    color: #9dc0ff;
+    font-size: 12.5px;
+    line-height: 1.4;
+  }
+
+  .rotate-hint button {
+    margin-left: auto;
+    flex: none;
+    padding: 2px 8px;
+    font-size: 12px;
+    background: transparent;
+    border-color: #2a3a52;
+    color: #9dc0ff;
+  }
 }
 
 /* A show from a link is the one way somebody else's code gets here, so it asks

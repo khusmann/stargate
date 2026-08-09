@@ -33,6 +33,20 @@ import type { PixelStyle, Player } from "./player";
  *  wholesale — which shows up as a blank page mid-session. */
 const ZOOM_STEPS = [4, 6, 8, 10] as const;
 
+/** `fit` is not restricted to the ladder above — it takes the largest whole
+ *  number of screen pixels per wall pixel that the viewport allows. The ladder
+ *  is for choosing quickly; fit is for using the window. Restricting it to the
+ *  listed steps left 400 px of dead space on a wide monitor (where 10x fits but
+ *  13x also would) and overflowed by 400 px on a phone (where even 4x does not).
+ *
+ *  The emitter view needs at least 4 px per pixel to read, so below that the
+ *  preview falls back to flat squares on its own. */
+const LED_MIN_ZOOM = 4;
+/** Ceiling on fit. At 16x a strip's backing store is already ~9 MB in LED mode
+ *  on a HiDPI screen, and nothing is gained past the point where a wall pixel
+ *  is a thumbnail. */
+const FIT_MAX_ZOOM = 16;
+
 /** Screen pixels between the strips. Not adjustable: the walls are metres
  *  apart, so no width is "correct" and tuning one implies precision that does
  *  not exist. It only has to say *different wall*. */
@@ -57,9 +71,12 @@ export function Preview({ player }: PreviewProps): React.ReactElement {
   // one you switch to when you need to read exact pixels.
   const [pixelStyle, setPixelStyle] = useState<PixelStyle>("led");
 
-  const fitZoom =
-    [...ZOOM_STEPS].reverse().find((z) => WIDTH * z <= viewWidth) ?? ZOOM_STEPS[0];
+  const fitZoom = Math.max(
+    1,
+    Math.min(FIT_MAX_ZOOM, Math.floor(viewWidth / WIDTH)),
+  );
   const zoom = zoomChoice === "fit" ? fitZoom : zoomChoice;
+  const ledsReadable = zoom >= LED_MIN_ZOOM;
   const contentWidth = WIDTH * zoom;
   const scrolls = viewWidth > 0 && contentWidth > viewWidth;
 
@@ -71,8 +88,8 @@ export function Preview({ player }: PreviewProps): React.ReactElement {
 
   // The backing store depends on both, so the player owns the resize.
   useEffect(() => {
-    player.setDisplay(pixelStyle, zoom);
-  }, [player, pixelStyle, zoom]);
+    player.setDisplay(ledsReadable ? pixelStyle : "square", zoom);
+  }, [player, pixelStyle, zoom, ledsReadable]);
 
   useLayoutEffect(() => {
     const el = scroller.current;
@@ -222,9 +239,14 @@ export function Preview({ player }: PreviewProps): React.ReactElement {
           </button>
           <button
             type="button"
-            aria-pressed={pixelStyle === "led"}
+            aria-pressed={pixelStyle === "led" && ledsReadable}
+            disabled={!ledsReadable}
             onClick={() => setPixelStyle("led")}
-            title="Round emitters on a dark pitch, like the real modules"
+            title={
+              ledsReadable
+                ? "Round emitters on a dark pitch, like the real modules"
+                : `Needs ${LED_MIN_ZOOM}x or more — an emitter and its gap would be one screen pixel each`
+            }
           >
             LEDs
           </button>

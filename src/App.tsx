@@ -41,6 +41,7 @@ export function App(): React.ReactElement {
   const [exportState, setExportState] = useState<ExportState>({ status: "idle" });
   const [status, setStatus] = useState<string | null>(null);
   const [seam, setSeam] = useState<string | null>(null);
+  const [rotateHint, setRotateHint] = useState(true);
 
   const readouts = useRef<Readouts>({ clock: null, scrub: null });
   const abort = useRef<AbortController | null>(null);
@@ -187,7 +188,6 @@ export function App(): React.ReactElement {
         </div>
 
         <div className="topbar-right">
-          {status && <span className="status">{status}</span>}
           <button
             type="button"
             onClick={async () => {
@@ -228,6 +228,33 @@ export function App(): React.ReactElement {
             className="progress-bar"
             style={{ width: `${(exportState.frame / exportState.frames) * 100}%` }}
           />
+        </div>
+      )}
+
+      {/* An overlay, not part of any row: a transient message must never move
+          the thing you were just looking at. */}
+      {status && (
+        <div className="status" role="status">
+          {status}
+        </div>
+      )}
+
+      {/* Only rendered at all in narrow portrait — see the media query. The
+          wall is 16:1, so a phone held upright shows about half of it even at
+          the lowest zoom. Rotating hides this without needing to dismiss it. */}
+      {rotateHint && (
+        <div className="rotate-hint">
+          <span>
+            The wall is 16:1 — turn your phone sideways to see all 192 columns at
+            once.
+          </span>
+          <button
+            type="button"
+            aria-label="Dismiss"
+            onClick={() => setRotateHint(false)}
+          >
+            ✕
+          </button>
         </div>
       )}
 
