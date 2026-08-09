@@ -224,6 +224,40 @@ button[aria-pressed="true"] {
   transition: width 120ms linear;
 }
 
+/* A show from a link is the one way somebody else's code gets here, so it asks
+   before running. Deliberately loud, and directly above the preview it is
+   about to fill. */
+.consent {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  margin: 12px 14px 0;
+  padding: 10px 12px;
+  border: 1px solid #6b4a1e;
+  border-radius: 8px;
+  background: #21190f;
+  color: #f0cf9a;
+  font-size: 13px;
+}
+
+.consent strong {
+  color: #ffd9a0;
+}
+
+.consent span {
+  color: #c8ab7f;
+}
+
+.consent button {
+  margin-left: auto;
+  flex: none;
+}
+
+.consent button + button {
+  margin-left: 0;
+}
+
 /* --- preview -------------------------------------------------------- */
 
 .preview {
@@ -419,6 +453,30 @@ button[aria-pressed="true"] {
   align-items: baseline;
 }
 
+/* A show that does not close is not an error — it runs fine, it just seams
+   every time round. Amber, not red, and it never blocks. */
+.notice {
+  flex: none;
+  border-top: 1px solid #4a3413;
+  background: #1c1710;
+  color: #f0cf9a;
+  padding: 8px 12px;
+  font-size: 13px;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.notice button,
+.error button {
+  margin-left: auto;
+  align-self: center;
+  padding: 3px 9px;
+  font-size: 12px;
+  flex: none;
+}
+
+.notice .msg,
 .error .msg {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;

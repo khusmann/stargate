@@ -4,11 +4,19 @@ import { Preview } from "./preview/Preview";
 import { Transport, type Readouts } from "./preview/Transport";
 import { Player } from "./preview/player";
 import { compileShow, type Show } from "./runtime/compile";
+import { describeSeam, findLoopSeam } from "./runtime/loop";
 import type { ShowError } from "./runtime/errors";
 import { toShowError } from "./runtime/errors";
 import { DEFAULT_EXAMPLE, type Example } from "./examples";
 import { ExampleMenu } from "./examples/ExampleMenu";
-import { initialScript, save, shareUrl, writeFragment } from "./store/persist";
+import {
+  clearFragment,
+  incomingScript,
+  initialState,
+  save,
+  shareUrl,
+  writeFragment,
+} from "./store/persist";
 import { ExportCancelled, downloadBlob, exportShow, zipName } from "./export/exportShow";
 import { buildPrompt } from "./api/prompt";
 import { copyText } from "./util/clipboard";
@@ -21,13 +29,18 @@ type ExportState =
   | { status: "running"; frame: number; frames: number };
 
 export function App(): React.ReactElement {
-  const [source, setSource] = useState(() => initialScript(DEFAULT_EXAMPLE.source));
+  const [initial] = useState(() => initialState(DEFAULT_EXAMPLE.source));
+  const [source, setSource] = useState(initial.source);
+  // A show that arrived in a link is shown but not run until it is accepted.
+  // Until then nothing about it is compiled, executed, or saved.
+  const [pendingLink, setPendingLink] = useState(initial.fromLink);
   const [show, setShow] = useState<Show | null>(null);
   const [error, setError] = useState<ShowError | null>(null);
   const [playing, setPlaying] = useState(false);
   const [looping, setLooping] = useState(true);
   const [exportState, setExportState] = useState<ExportState>({ status: "idle" });
   const [status, setStatus] = useState<string | null>(null);
+  const [seam, setSeam] = useState<string | null>(null);
 
   const readouts = useRef<Readouts>({ clock: null, scrub: null });
   const abort = useRef<AbortController | null>(null);
@@ -61,6 +74,7 @@ export function App(): React.ReactElement {
 
   // Hot reload: compile shortly after typing stops, keeping the playhead.
   useEffect(() => {
+    if (pendingLink) return;
     const timer = setTimeout(() => {
       try {
         const compiled = compileShow(source);
@@ -68,13 +82,17 @@ export function App(): React.ReactElement {
         setError(null);
         player.setShow(compiled);
         player.refresh();
+        // Two extra frames per edit, to catch the flaw you cannot see without
+        // watching the exact moment the show wraps.
+        const found = findLoopSeam(compiled);
+        setSeam(found ? describeSeam(compiled, found) : null);
       } catch (err) {
         // Keep the last good show on screen; only the marker changes.
         setError(toShowError(err, "compile"));
       }
     }, COMPILE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [source, player]);
+  }, [source, player, pendingLink]);
 
   // First successful compile starts playing.
   const started = useRef(false);
@@ -86,12 +104,30 @@ export function App(): React.ReactElement {
   }, [show, player]);
 
   useEffect(() => {
+    // Never persist an unaccepted link. Otherwise opening one hostile URL would
+    // plant its payload in localStorage and run it on every later visit, with
+    // no link in sight.
+    if (pendingLink) return;
     const timer = setTimeout(() => {
       save(source);
       writeFragment(source);
     }, PERSIST_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [source]);
+  }, [source, pendingLink]);
+
+  // A link pasted into an already-open tab only changes the fragment, which is
+  // a same-document navigation: nothing reloads, so watch for it. It gets the
+  // same consent gate as one that was followed cold.
+  useEffect(() => {
+    const onHashChange = (): void => {
+      const shared = incomingScript();
+      if (shared === null) return;
+      setSource(shared);
+      setPendingLink(true);
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
 
   const flash = useCallback((message: string) => {
     setStatus(message);
@@ -195,6 +231,37 @@ export function App(): React.ReactElement {
         </div>
       )}
 
+      {pendingLink && (
+        <div className="consent" role="alert">
+          <strong>This link contains someone else&rsquo;s show.</strong>
+          <span>
+            A show is JavaScript, and running it gives it the same access to this
+            page as any other code here. It is in the editor below — read it
+            first.
+          </span>
+          <button
+            type="button"
+            className="primary"
+            onClick={() => {
+              setPendingLink(false);
+              flash("Running the shared show");
+            }}
+          >
+            Run it
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              clearFragment();
+              setSource(DEFAULT_EXAMPLE.source);
+              setPendingLink(false);
+            }}
+          >
+            Discard
+          </button>
+        </div>
+      )}
+
       <Preview player={player} />
 
       <Transport
@@ -209,11 +276,38 @@ export function App(): React.ReactElement {
       <div className="lower">
         <div className="editor-pane">
           <Editor value={source} onChange={setSource} marker={marker} />
+          {!error && seam && (
+            <div className="notice" role="status">
+              <strong>Loop</strong>
+              <span className="msg">{seam}</span>
+              <button
+                type="button"
+                onClick={async () => {
+                  flash((await copyText(seam)) ? "Copied — paste it back" : "Copy failed");
+                }}
+                title="Copy this for the assistant that wrote the show"
+              >
+                Copy
+              </button>
+            </div>
+          )}
           {error && (
             <div className="error" role="alert">
               <strong>{error.phase === "compile" ? "Show error" : "Frame error"}</strong>
               {error.line !== undefined && <span className="dim"> line {error.line}</span>}
               <span className="msg">{error.message}</span>
+              <button
+                type="button"
+                onClick={async () => {
+                  const text =
+                    `${error.message}` +
+                    (error.line === undefined ? "" : ` (line ${error.line})`);
+                  flash((await copyText(text)) ? "Copied — paste it back" : "Copy failed");
+                }}
+                title="Copy this for the assistant that wrote the show"
+              >
+                Copy
+              </button>
             </div>
           )}
         </div>

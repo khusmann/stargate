@@ -129,10 +129,24 @@ class FakeContext {
   fillText() {}
   strokeText() {}
 
-  // Present so the runtime can call them; the export check does not rely on them.
+  // Paths are accepted and not rasterised, for the same reason as text: this
+  // shim exists to prove shows run headlessly, and turning an arc into pixels
+  // is the browser's job. A show whose output is mostly paths will still be
+  // checked for compiling, throwing, and closing its loop — just not for what
+  // those paths look like.
   save() {}
   restore() {}
   beginPath() {}
+  closePath() {}
+  moveTo() {}
+  lineTo() {}
+  arc() {}
+  arcTo() {}
+  ellipse() {}
+  bezierCurveTo() {}
+  quadraticCurveTo() {}
+  fill() {}
+  stroke() {}
   rect() {}
   clip() {}
   setTransform() {}

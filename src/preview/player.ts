@@ -15,6 +15,40 @@ export interface PlayerTargets {
   left: HTMLCanvasElement;
 }
 
+/** How a wall pixel is drawn.
+ *
+ *  `square` is the cheap path: a 192 x 12 backing store scaled up by CSS with
+ *  nearest-neighbour, so the browser does the zoom for free.
+ *
+ *  `led` draws what the ceiling actually is — a grid of small round emitters
+ *  with dark space between them, pitched so the gap is about the size of the
+ *  emitter. It is not per-pixel drawing: 4,608 arcs a frame would be far too
+ *  slow. The strip is blitted blocky at device resolution and then a repeating
+ *  circle pattern is punched through it with `destination-in`, which is two
+ *  draw calls per strip however many LEDs there are. */
+export type PixelStyle = "square" | "led";
+
+/** Emitter diameter as a fraction of the pixel pitch. Around half means the dark
+ *  gap between two LEDs is about the size of an LED, which is roughly the real
+ *  module — a little over, because the diffuser makes the lit area wider than
+ *  the die. */
+const LED_FILL = 0.58;
+
+/** Where the emitter stops being solid and starts falling off. A hard-edged
+ *  disc reads as a printed dot; real ones have a soft shoulder. */
+const LED_CORE = 0.62;
+
+/** Strength of the bleed between emitters.
+ *
+ *  Masking alone loses about 80% of the light, because that is how much of the
+ *  wall is dark gap — which is true, and looks wrong, because it throws away
+ *  the halo that makes a real LED wall read as bright. This adds it back as a
+ *  smoothly interpolated copy of the same frame composited with `lighter`: each
+ *  emitter spills into its neighbours, exactly like the diffuser does, and the
+ *  colour is still the show's own. Brightness is not scaled anywhere — an
+ *  author judging levels is judging the real ones. */
+const LED_BLOOM = 0.45;
+
 export interface PlayerCallbacks {
   /** Every rendered frame. Write to the DOM here; never call setState. */
   onFrame?: (frame: number, frames: number) => void;
@@ -30,6 +64,10 @@ export class Player {
     left: CanvasRenderingContext2D;
   } | null = null;
 
+  private targets: PlayerTargets | null = null;
+  private style: PixelStyle = "square";
+  private zoom = 1;
+  private ledPattern: CanvasPattern | null = null;
   private show: Show | null = null;
   private clock = 0;
   private playing = false;
@@ -43,24 +81,51 @@ export class Player {
   constructor(private readonly callbacks: PlayerCallbacks = {}) {}
 
   attach(targets: PlayerTargets): void {
-    // Assigning width/height clears the canvas, so only do it when it is
-    // actually wrong: re-attaching must not wipe the frame on screen.
-    const size = (canvas: HTMLCanvasElement, width: number, height: number): void => {
-      if (canvas.width !== width) canvas.width = width;
-      if (canvas.height !== height) canvas.height = height;
-    };
-    size(targets.right, WIDTH, BAND_HEIGHT);
-    size(targets.left, WIDTH, BAND_HEIGHT);
+    this.targets = targets;
     const get = (c: HTMLCanvasElement): CanvasRenderingContext2D => {
       const ctx = c.getContext("2d");
       if (!ctx) throw new Error("Could not get a 2D context.");
-      ctx.imageSmoothingEnabled = false;
       return ctx;
     };
-    this.contexts = {
-      right: get(targets.right),
-      left: get(targets.left),
-    };
+    this.contexts = { right: get(targets.right), left: get(targets.left) };
+    this.applyDisplay();
+  }
+
+  /** Set how pixels are drawn and at what zoom. Both change the size of the
+   *  backing store, so this is also where the canvases get resized. */
+  setDisplay(style: PixelStyle, zoom: number): void {
+    if (this.style === style && this.zoom === zoom) return;
+    this.style = style;
+    this.zoom = zoom;
+    this.applyDisplay();
+    this.refresh();
+  }
+
+  private applyDisplay(): void {
+    const targets = this.targets;
+    const contexts = this.contexts;
+    if (!targets || !contexts) return;
+
+    // In square mode the backing store is one texel per wall pixel and CSS does
+    // the enlarging. In LED mode it has to hold real geometry, so it is sized in
+    // device pixels — which is also what keeps the circles crisp on a HiDPI
+    // screen instead of being upscaled by the compositor.
+    const dpr = this.style === "led" ? Math.min(2, window.devicePixelRatio || 1) : 1;
+    const cell = this.style === "led" ? Math.max(2, Math.round(this.zoom * dpr)) : 1;
+    const width = WIDTH * cell;
+    const height = BAND_HEIGHT * cell;
+
+    // Assigning width/height clears the canvas, so only do it when it is
+    // actually wrong: re-applying must not wipe the frame on screen.
+    for (const canvas of [targets.right, targets.left]) {
+      if (canvas.width !== width) canvas.width = width;
+      if (canvas.height !== height) canvas.height = height;
+    }
+    contexts.right.imageSmoothingEnabled = false;
+    contexts.left.imageSmoothingEnabled = false;
+
+    this.ledPattern =
+      this.style === "led" ? makeLedPattern(contexts.right, cell) : null;
     this.dirty = true;
   }
 
@@ -174,8 +239,43 @@ export class Player {
     const ctxs = this.contexts;
     if (!ctxs) return;
     const src = this.renderer.canvas;
-    ctxs.right.drawImage(src, 0, 0, WIDTH, BAND_HEIGHT, 0, 0, WIDTH, BAND_HEIGHT);
-    ctxs.left.drawImage(src, 0, BAND_HEIGHT, WIDTH, BAND_HEIGHT, 0, 0, WIDTH, BAND_HEIGHT);
+    this.blitBand(ctxs.right, src, 0);
+    this.blitBand(ctxs.left, src, BAND_HEIGHT);
+  }
+
+  private blitBand(
+    ctx: CanvasRenderingContext2D,
+    src: CanvasImageSource,
+    top: number,
+  ): void {
+    const width = ctx.canvas.width;
+    const height = ctx.canvas.height;
+
+    // `copy` rather than `source-over` plus a clear: one pass, and it discards
+    // whatever the previous frame left outside the emitters.
+    ctx.globalCompositeOperation = "copy";
+    ctx.drawImage(src, 0, top, WIDTH, BAND_HEIGHT, 0, 0, width, height);
+
+    if (this.ledPattern) {
+      // Keep only what falls inside an emitter. The pattern repeats from the
+      // canvas origin, which is the pixel grid origin, so every circle lands in
+      // the middle of its own wall pixel.
+      ctx.globalCompositeOperation = "destination-in";
+      ctx.fillStyle = this.ledPattern;
+      ctx.fillRect(0, 0, width, height);
+
+      // Then the bloom: the same frame again, bilinear rather than blocky, added
+      // on top. The smoothing is what spreads each pixel across its neighbours,
+      // so one extra draw buys the whole halo.
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = LED_BLOOM;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(src, 0, top, WIDTH, BAND_HEIGHT, 0, 0, width, height);
+      ctx.imageSmoothingEnabled = false;
+      ctx.globalAlpha = 1;
+    }
+    ctx.globalCompositeOperation = "source-over";
   }
 
   /** Current frame index, for callers that need it outside the loop. */
@@ -187,5 +287,30 @@ export class Player {
   dispose(): void {
     this.stop();
     this.contexts = null;
+    this.targets = null;
+    this.ledPattern = null;
   }
+}
+
+/** One cell of the emitter mask: an opaque circle on transparent, tiled. */
+function makeLedPattern(
+  ctx: CanvasRenderingContext2D,
+  cell: number,
+): CanvasPattern | null {
+  const tile = document.createElement("canvas");
+  tile.width = cell;
+  tile.height = cell;
+  const tileCtx = tile.getContext("2d");
+  if (!tileCtx) return null;
+  const centre = cell / 2;
+  const radius = (cell * LED_FILL) / 2;
+  const glow = tileCtx.createRadialGradient(centre, centre, 0, centre, centre, radius);
+  glow.addColorStop(0, "rgba(255,255,255,1)");
+  glow.addColorStop(LED_CORE, "rgba(255,255,255,1)");
+  glow.addColorStop(1, "rgba(255,255,255,0)");
+  tileCtx.fillStyle = glow;
+  tileCtx.beginPath();
+  tileCtx.arc(centre, centre, radius, 0, Math.PI * 2);
+  tileCtx.fill();
+  return ctx.createPattern(tile, "repeat");
 }

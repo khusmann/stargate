@@ -64,10 +64,30 @@ volumetric fractal. They double as the test suite.
 
 ## The preview
 
-Two strips with a fixed screen-space gap, integer zoom only, nearest-neighbour.
-A row gutter down the left reads in canvas coordinates 0–23 — the same `y` a
-show is handed — and a column ruler along the bottom marks column 96, the
-controller seam.
+Two strips with a fixed screen-space gap, integer zoom only (4x–10x),
+nearest-neighbour. A column ruler along the bottom marks column 96, the
+controller seam, and the ends of the wall.
+
+**Two pixel modes.** *LEDs* is the default: round emitters on a dark pitch, the
+gap about the size of an emitter, which is what the ceiling actually is. *Flat*
+is what the exported frames contain — contiguous squares, one texel per wall
+pixel — and is the one to switch to when you need to read exact pixels.
+
+The LED view is a mask, not per-pixel drawing. The strip is blitted blocky at
+device resolution, a repeating emitter pattern is punched through it with
+`destination-in`, and then the same frame is added back on top bilinearly with
+`lighter` — which is the bloom, and the reason it does not look dim. Masking
+alone throws away about 80% of the light, because that is how much of the wall
+is dark gap; the halo is what a real diffuser puts back. Three draw calls per
+strip rather than 4,608 arcs, and it holds 60 fps at 10x.
+
+**No brightness is scaled anywhere.** The emitter is the show's own colour and
+the halo is that colour at lower alpha, so an author judging output levels is
+judging the real ones. Boosting the colours to match the flat view would have
+been the easy fix and the wrong one. Export is untouched either way.
+
+The zoom ladder starts at 4x because below it an emitter and its gap would be
+one screen pixel each, and the whole wall is only 384 px at 2x anyway.
 
 Panning is a scroll container. Note two deliberate departures from *Preview* in
 DESIGN.md, both made at the bench: there is **no overview bar**, and the
@@ -122,6 +142,37 @@ drifting show as the negative control.
 
 It does not cover the browser's own PNG encoder or a real 2D context. Those are
 exercised in the app.
+
+## Running someone else's show
+
+A show is arbitrary JavaScript, executed with `new Function` in this page's
+origin. For code you typed or pasted deliberately that is the same trust as any
+other snippet you run. The sharp edge is the share link, because it is the one
+way somebody else's code arrives — so:
+
+- **A link never runs on its own.** Its show is loaded into the editor to be
+  read, behind a *Run it / Discard* bar. This covers both following a link and
+  pasting one into an already-open tab, which only changes the fragment and does
+  not reload the page.
+- **A link never touches saved work.** Nothing from an unaccepted link is
+  written to `localStorage`, so opening one cannot plant a payload that runs on
+  every later visit.
+- **The build ships a CSP** with `connect-src 'none'`. The app makes no network
+  requests after load, so denying them removes exfiltration outright. It cannot
+  drop `unsafe-eval` — `new Function` is the show runtime — so this is defence
+  in depth, not a sandbox. Dev builds skip it, because Vite's hot reload needs a
+  websocket.
+- **`#new` is the escape hatch.** An endless loop in `pixel` freezes the tab, and
+  the script is restored from storage on the next visit, so the freeze would
+  repeat. Opening `…/stargate/#new` clears storage and starts from the default
+  without running anything.
+
+What none of this fixes: a show you choose to run can still read the origin's
+`localStorage` and rewrite the page, and on GitHub Pages that origin is shared
+with every other project page on the same account. Proper isolation means
+running shows in a sandboxed iframe or a worker with an opaque origin — the
+route CodePen and JSFiddle take by serving user code from a separate domain.
+That is a v2 change, not a v1 patch.
 
 ## Credits
 

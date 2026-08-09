@@ -19,15 +19,19 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BAND_HEIGHT, WIDTH } from "../runtime/geometry";
-import type { Player } from "./player";
+import type { PixelStyle, Player } from "./player";
 
 /** Integer zoom only. A preview pixel is always a whole number of screen
  *  pixels — fractional zoom makes some pixels 10 px wide and others 11.
  *
+ *  Starts at 4x. Below that an LED and the dark gap beside it would be one
+ *  screen pixel each, so the emitter view degenerates into mush and the whole
+ *  wall is 384 px anyway — there is nothing to see at 1x that 4x does not show.
+ *
  *  Not exported: a module holding a component must export only components, or
  *  React Fast Refresh bails out and hot updates start replacing the module
  *  wholesale — which shows up as a blank page mid-session. */
-const ZOOM_STEPS = [1, 2, 4, 6, 8, 10] as const;
+const ZOOM_STEPS = [4, 6, 8, 10] as const;
 
 /** Screen pixels between the strips. Not adjustable: the walls are metres
  *  apart, so no width is "correct" and tuning one implies precision that does
@@ -49,6 +53,9 @@ export function Preview({ player }: PreviewProps): React.ReactElement {
 
   const [viewWidth, setViewWidth] = useState(0);
   const [zoomChoice, setZoomChoice] = useState<number | "fit">("fit");
+  // LEDs by default: it is what the room looks like, and the flat view is the
+  // one you switch to when you need to read exact pixels.
+  const [pixelStyle, setPixelStyle] = useState<PixelStyle>("led");
 
   const fitZoom =
     [...ZOOM_STEPS].reverse().find((z) => WIDTH * z <= viewWidth) ?? ZOOM_STEPS[0];
@@ -61,6 +68,11 @@ export function Preview({ player }: PreviewProps): React.ReactElement {
     player.attach({ right: right.current, left: left.current });
     player.refresh();
   }, [player]);
+
+  // The backing store depends on both, so the player owns the resize.
+  useEffect(() => {
+    player.setDisplay(pixelStyle, zoom);
+  }, [player, pixelStyle, zoom]);
 
   useLayoutEffect(() => {
     const el = scroller.current;
@@ -193,6 +205,26 @@ export function Preview({ player }: PreviewProps): React.ReactElement {
             onClick={() => zoomTo("fit")}
           >
             fit
+          </button>
+        </div>
+
+        <div className="zoom">
+          <span className="dim">pixels</span>
+          <button
+            type="button"
+            aria-pressed={pixelStyle === "square"}
+            onClick={() => setPixelStyle("square")}
+            title="Flat pixels — what the exported frames contain"
+          >
+            flat
+          </button>
+          <button
+            type="button"
+            aria-pressed={pixelStyle === "led"}
+            onClick={() => setPixelStyle("led")}
+            title="Round emitters on a dark pitch, like the real modules"
+          >
+            LEDs
           </button>
         </div>
       </div>

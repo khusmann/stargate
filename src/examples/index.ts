@@ -477,21 +477,21 @@ const hyperspace = `export const name = "Hyperspace", fps = 30, seconds = 28;
 // loops: space is tiled every TILE * 2 units, so flying exactly TRIPS tiles
 // down z during the show lands on a field identical to the one it started on.
 const TILE = 0.85;
-const TRIPS = 18;              // tiles travelled per loop — any integer works,
-                               // and this is the flythrough speed: 18 tiles in
-                               // 28 s is about a tile a second
+const TRIPS = 13;              // tiles travelled per loop — any integer works,
+                               // and this is the flythrough speed: 13 tiles in
+                               // 28 s is about a tile every two seconds
 const STEPS = 10;              // volumetric samples along each ray
 const ITER = 12;               // fractal folds per sample
 const FOLD = 0.53;
 const WOBBLE = 0.035;          // how much the fractal itself morphs, per loop
-const SIDEWAYS = 5;            // tiles of drift across the field, per loop
+const SIDEWAYS = 4;            // tiles of drift across the field, per loop
 const ROLL = 1;                // turns the ray tumbles, per loop
 const FLOOR = 0.02;            // smallest divisor in the fold — see below
 const ZOOM = 0.78;
 const BRIGHT = 0.0026;
 const DISTFADE = 0.76;
 const DARK = 0.30;
-const GAIN = 0.036;            // the whole accumulation is scaled once, at the end
+const GAIN = 0.044;            // the whole accumulation is scaled once, at the end
 const GAMMA = 1.9;             // pushes the dust between filaments back to black
 
 function tile(v) {
@@ -816,6 +816,169 @@ export function pixel(x, y, t) {
 }
 `;
 
+const fluid = `export const name = "Fluid", fps = 30, seconds = 48;
+
+// A fluid, without a fluid simulation.
+//
+// A real solver needs state: a velocity field advected from the frame before,
+// which a pure \\\`pixel(x, y, t)\\\` cannot hold and which would not survive
+// scrubbing backwards. So this fakes the part you can actually see. Curl noise
+// gives a divergence-free velocity field — take a scalar field and rotate its
+// gradient 90 degrees, and the result has no sources or sinks anywhere, which
+// is exactly the property that makes smoke look like smoke rather than like
+// something being sprayed.
+//
+// Then instead of advecting dye forward, each pixel traces its own path
+// *backwards* through that field and samples the dye where it came from. Four
+// steps of that is enough to read as flow, it needs no memory between frames,
+// and it stays a pure function of t — so the loop still closes.
+const PERIOD = 8;
+const STEPS = 4;
+const STEP = 0.55;
+const SWIRL = 2.6;
+// Doubling the show length would halve every speed, so the rates are given per
+// loop rather than per second: two tiles of drift and six passes of dye, the
+// same motion as before over twice the time. The colour is the one thing that
+// does get slower — one full turn of the wheel across the whole show, which is
+// only worth doing on a show this long.
+const DRIFT = 2;              // tiles the flow field travels, per loop
+const PASSES = 6;             // times the dye pattern comes round, per loop
+const HUES = 1;               // full rotations of the colour wheel, per loop
+
+function hash(x, y) {
+  let h = Math.imul(x, 374761393) + Math.imul(y, 668265263);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+function noise(x, y, period) {
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const xf = x - xi, yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf);
+  const v = yf * yf * (3 - 2 * yf);
+  const x0 = ((xi % period) + period) % period;
+  const x1 = (x0 + 1) % period;
+  const a = hash(x0, yi), b = hash(x1, yi);
+  const c = hash(x0, yi + 1), d = hash(x1, yi + 1);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+
+function fbm(x, y) {
+  return noise(x, y, PERIOD) * 0.6 + noise(x * 2, y * 2, PERIOD * 2) * 0.4;
+}
+
+// The stream function. Velocity is its gradient, rotated: (dF/dy, -dF/dx).
+function stream(x, y, p) {
+  return fbm(x * 0.055 + p * PERIOD * DRIFT, y * 0.16);
+}
+
+export function pixel(x, y, t) {
+  const wall = y < 12 ? 0 : 1;
+  const p = t / seconds;
+  let px = x;
+  let py = (y % 12) + wall * 40;
+
+  // Walk backwards along the flow, gathering where this pixel came from.
+  for (let i = 0; i < STEPS; i++) {
+    const e = 0.9;
+    const f0 = stream(px, py, p);
+    const vx = (stream(px, py + e, p) - f0) / e;
+    const vy = -(stream(px + e, py, p) - f0) / e;
+    px -= vx * SWIRL * STEP * 30;
+    py -= vy * SWIRL * STEP * 30;
+  }
+
+  // The dye: bands that the flow shears into filaments and folds back together.
+  const dye = 0.5 + 0.5 * Math.sin(px * 0.09 - p * Math.PI * 2 * PASSES + py * 0.22);
+  const density = dye * dye;
+
+  // Speed at the sample point tints it — fast water runs pale, slow runs deep.
+  const speed = Math.min(1, Math.abs(px - x) * 0.05 + Math.abs(py - ((y % 12) + wall * 40)) * 0.08);
+
+  const hue = 186 + speed * 90 - density * 40 + p * 360 * HUES;
+  return hsl(hue, 0.85 - speed * 0.35, Math.min(0.6, density * 0.5 + speed * 0.14));
+}
+`;
+
+const pacman = `export const name = "Pac-Man", fps = 30, seconds = 24;
+
+// The wall's own history: the show this installation was built to run was a
+// Pac-Man chase, hand-rendered to 937 PNG frames off a video. This is the same
+// idea as thirty lines of code that can never lose track of which folder it is.
+//
+// Both walls run the corridor, in opposite directions and out of step, so the
+// chase passes you going one way and comes back the other.
+const DOTS = 8;               // pixels between pellets
+const LAP = 24;               // seconds for one length of the room
+const CHOMP = 6;              // bites per second
+// Everything that wobbles has to complete whole cycles per loop, or the show
+// seams — the ghosts jump and the frightened flash restarts.
+const SCARE = ((Math.PI * 2) / seconds) * 3;
+const BOB = ((Math.PI * 2) / seconds) * 7;
+
+function ghost(ctx, x, top, colour, scared) {
+  ctx.fillStyle = scared ? "#2121de" : colour;
+  ctx.fillRect(x + 1, top + 2, 5, 6);      // body
+  ctx.fillRect(x, top + 3, 7, 5);
+  ctx.fillRect(x, top + 8, 1, 1);          // skirt
+  ctx.fillRect(x + 2, top + 8, 1, 1);
+  ctx.fillRect(x + 4, top + 8, 1, 1);
+  ctx.fillRect(x + 6, top + 8, 1, 1);
+  ctx.fillStyle = "#fff";                  // eyes
+  ctx.fillRect(x + 1, top + 4, 2, 2);
+  ctx.fillRect(x + 4, top + 4, 2, 2);
+  ctx.fillStyle = scared ? "#fff" : "#2121de";
+  ctx.fillRect(x + 2, top + 5, 1, 1);
+  ctx.fillRect(x + 5, top + 5, 1, 1);
+}
+
+function pac(ctx, x, top, t, dir) {
+  // The mouth is a wedge cut out of a disc, which is one arc and one lineTo —
+  // the case \\\`draw\\\` exists for, and miserable to express as a shader.
+  const open = Math.abs(Math.sin(t * Math.PI * CHOMP)) * 0.72;
+  const facing = dir > 0 ? 0 : Math.PI;      // the mouth leads the way he goes
+  ctx.fillStyle = "#ffd400";
+  ctx.beginPath();
+  ctx.moveTo(x + 4, top + 5);
+  ctx.arc(x + 4, top + 5, 4.2, facing + open, facing - open + Math.PI * 2);
+  ctx.closePath();
+  ctx.fill();
+}
+
+export function draw(ctx, t) {
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, 192, 24);
+
+  for (let wall = 0; wall < 2; wall++) {
+    const top = wall * 12;
+    // Opposite directions, and the far wall runs half a lap behind.
+    const phase = (t / LAP + wall * 0.5) % 1;
+    const forward = wall === 0;
+    const lead = forward ? phase * 232 - 20 : 212 - phase * 232;
+
+    // Pellets, eaten as he passes: a pellet is gone once he is past it.
+    ctx.fillStyle = "#ffb897";
+    for (let x = DOTS / 2; x < 192; x += DOTS) {
+      const eaten = forward ? x < lead + 2 : x > lead + 6;
+      if (eaten) continue;
+      const big = x % (DOTS * 6) < DOTS / 2;
+      if (big) ctx.fillRect(x - 1, top + 4, 3, 3);
+      else ctx.fillRect(x, top + 5, 1, 1);
+    }
+
+    pac(ctx, lead, top, t, forward ? 1 : -1);
+
+    // Four ghosts in a queue behind him, closing and falling back.
+    const colours = ["#ff0000", "#ffb8ff", "#00ffff", "#ffb851"];
+    const scared = Math.sin(SCARE * t + wall) > 0.55;
+    for (let i = 0; i < 4; i++) {
+      const gap = 11 + i * 9 + Math.sin(BOB * t + i * 1.3 + wall) * 2.5;
+      ghost(ctx, forward ? lead - gap : lead + gap, top, colours[i], scared);
+    }
+  }
+}
+`;
+
 export const EXAMPLES: Example[] = [
   {
     id: "plasma",
@@ -884,16 +1047,22 @@ export const EXAMPLES: Example[] = [
     source: marquee,
   },
   {
+    id: "arc",
+    name: "Arc",
+    blurb: "Lightning as 1/distance to a hashed polyline. Re-strikes 24x a loop.",
+    source: arc,
+  },
+  {
+    id: "pacman",
+    name: "Pac-Man",
+    blurb: "The show this wall was built for, as thirty lines instead of 937 PNGs.",
+    source: pacman,
+  },
+  {
     id: "lattice",
     name: "Lattice",
     blurb: "Hard geometry from distance functions, with a moving highlight.",
     source: lattice,
-  },
-  {
-    id: "hyperspace",
-    name: "Hyperspace",
-    blurb: "Volumetric fractal, 120 iterations a pixel. After Kali's Star Nest.",
-    source: hyperspace,
   },
   {
     id: "ion-tunnel",
@@ -908,10 +1077,16 @@ export const EXAMPLES: Example[] = [
     source: domainWarp,
   },
   {
-    id: "arc",
-    name: "Arc",
-    blurb: "Lightning as 1/distance to a hashed polyline. Re-strikes 24x a loop.",
-    source: arc,
+    id: "hyperspace",
+    name: "Hyperspace",
+    blurb: "Volumetric fractal, 120 iterations a pixel. After Kali's Star Nest.",
+    source: hyperspace,
+  },
+  {
+    id: "fluid",
+    name: "Fluid",
+    blurb: "Curl noise plus backward advection — flow with no state to store.",
+    source: fluid,
   },
 ];
 

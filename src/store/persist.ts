@@ -42,11 +42,27 @@ export function scriptFromFragment(hash: string = location.hash): string | null 
   return encoded ? decodeScript(encoded) : null;
 }
 
+/** The last fragment this app wrote, so an incoming one can be told apart from
+ *  the echo of our own autosave. */
+let lastWritten: string | null = null;
+
 /** Rewrite the fragment in place — never a history entry per keystroke. */
 export function writeFragment(source: string): void {
   const params = new URLSearchParams();
   params.set(FRAGMENT_KEY, encodeScript(source));
-  history.replaceState(null, "", `${location.pathname}${location.search}#${params}`);
+  lastWritten = `#${params}`;
+  history.replaceState(null, "", `${location.pathname}${location.search}${lastWritten}`);
+}
+
+/**
+ * A show that appeared in the address bar of an already-open tab — someone
+ * pasting a share link rather than following one. Changing only the fragment is
+ * a same-document navigation, so nothing reloads and the app has to notice for
+ * itself. Returns null for the echo of our own autosave.
+ */
+export function incomingScript(): string | null {
+  if (location.hash === lastWritten) return null;
+  return scriptFromFragment();
 }
 
 export function shareUrl(source: string): string {
@@ -71,7 +87,43 @@ export function save(source: string): void {
   }
 }
 
-/** A fragment wins over saved state — following a link should show that show. */
-export function initialScript(fallback: string): string {
-  return scriptFromFragment() ?? loadSaved() ?? fallback;
+export function clearSaved(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Nothing saved, nothing to clear.
+  }
+}
+
+/** Strip the fragment without adding a history entry. */
+export function clearFragment(): void {
+  history.replaceState(null, "", `${location.pathname}${location.search}`);
+}
+
+export interface InitialState {
+  source: string;
+  /**
+   * True when the source arrived in a link. A link is the one way somebody
+   * else's code reaches this app, and a show is arbitrary JavaScript running in
+   * this origin — so it is loaded into the editor to be read, and not run until
+   * the person looking at it says so. Everything else here is code you typed or
+   * pasted deliberately.
+   */
+  fromLink: boolean;
+}
+
+/** The escape hatch. A show with an endless loop in `pixel` freezes the tab,
+ *  and because the script is restored from storage, reopening freezes it again
+ *  — so there has to be a URL that starts clean without running anything. */
+const RESET_HASHES = new Set(["#new", "#reset"]);
+
+export function initialState(fallback: string): InitialState {
+  if (RESET_HASHES.has(location.hash)) {
+    clearSaved();
+    clearFragment();
+    return { source: fallback, fromLink: false };
+  }
+  const shared = scriptFromFragment();
+  if (shared !== null) return { source: shared, fromLink: true };
+  return { source: loadSaved() ?? fallback, fromLink: false };
 }
