@@ -1,3 +1,7 @@
+node_modules/
+dist/
+dist-single/
+
 resources/
 spike/frames/
 spike/*.zip
