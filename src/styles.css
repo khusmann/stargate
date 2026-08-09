@@ -156,6 +156,14 @@ button[aria-pressed="true"] {
     grid-area: right;
     flex-wrap: wrap;
     justify-content: flex-start;
+    gap: 6px;
+  }
+
+  /* Small enough to keep the three action buttons on one line at 375 px,
+     the narrowest phone width worth designing for. */
+  .topbar-right button {
+    padding: 5px 8px;
+    font-size: 12px;
   }
 
   /* The scrubber needs the full width to be usable with a thumb; the buttons
