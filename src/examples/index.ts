@@ -464,10 +464,12 @@ export function pixel(x, y, t) {
 
 const hyperspace = `export const name = "Hyperspace", fps = 30, seconds = 28;
 
-// After Kali's "Star Nest" — a volumetric fractal, sampled by marching a ray
-// and folding space at every step. There is no geometry anywhere in here; the
-// structure is what falls out of dividing a point by its own squared length,
-// over and over.
+// After "Star Nest" by Kali (Pablo Roman Andrioli), MIT licensed:
+//   https://www.shadertoy.com/view/XlfGRj
+//
+// A volumetric fractal, sampled by marching a ray and folding space at every
+// step. There is no geometry anywhere in here; the structure is what falls out
+// of dividing a point by its own squared length, over and over.
 //
 // Two things make it work in a browser instead of on a GPU. The vector maths is
 // written out as scalars — ugly, and several times faster than allocating a
@@ -571,7 +573,10 @@ export function pixel(x, y, t) {
 
 const ionTunnel = `export const name = "Ion Tunnel", fps = 30, seconds = 16;
 
-// A neon tunnel — and not a raymarched one. For a perfect infinite cylinder you
+// A neon tunnel, built on the analytic tunnel mapping Inigo Quilez writes up
+// here: https://iquilezles.org/articles/tunnel/
+//
+// Not raymarched. For a perfect infinite cylinder you
 // do not need to march anything: the ray from the eye through a pixel at radius
 // r hits the tube at distance 1/r, and at angle atan2(y, x) around it. So the
 // whole tunnel is two lines of maths per pixel, exactly, with no stepping and
@@ -628,9 +633,13 @@ export function pixel(x, y, t) {
 
 const domainWarp = `export const name = "Domain Warp", fps = 30, seconds = 28;
 
-// Inigo Quilez's domain warping: take a noise field, and instead of asking for
-// its value at p, ask for it at p distorted by *another* noise field. Do it
-// twice and flat clouds turn into something that looks like it is being stirred.
+// Inigo Quilez's domain warping:
+//   https://iquilezles.org/articles/warp/
+//   https://www.shadertoy.com/view/lsl3RH
+//
+// Take a noise field, and instead of asking for its value at p, ask for it at p
+// distorted by *another* noise field. Do it twice and flat clouds turn into
+// something that looks like it is being stirred.
 //
 //   f(p) = fbm(p + 4 * fbm(p + 4 * fbm(p)))
 //

@@ -123,6 +123,22 @@ drifting show as the negative control.
 It does not cover the browser's own PNG encoder or a real 2D context. Those are
 exercised in the app.
 
+## Credits
+
+Three of the showpieces are adaptations of published work, cited in the source
+of each example as well as here:
+
+- **Hyperspace** — after [Star Nest](https://www.shadertoy.com/view/XlfGRj) by
+  Kali (Pablo Roman Andrioli), MIT licensed.
+- **Domain Warp** — Inigo Quilez's
+  [domain warping](https://iquilezles.org/articles/warp/), and his Shadertoy
+  [Warping - procedural 2](https://www.shadertoy.com/view/lsl3RH).
+- **Ion Tunnel** — the analytic tunnel mapping, from Inigo Quilez's
+  [tunnels article](https://iquilezles.org/articles/tunnel/).
+
+The rest are original, and all of them are rewritten rather than ported: no
+vectors, no allocation per pixel, and every one closes its loop exactly.
+
 ## One-time setup for GitHub Pages
 
 Not automated, and not something the build can do for you:

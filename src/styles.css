@@ -262,47 +262,10 @@ button[aria-pressed="true"] {
   padding: 10px 14px 14px;
 }
 
-/* A scrollbar above the content instead of below it: a second scroll container
-   with nothing in it but a spacer, kept in step with the real one.
-   Explicitly sized and styled, because an overlay scrollbar — the default on
-   macOS and on Chromium with overlay scrollbars — would be invisible until
-   touched, and being visible is the entire point of putting it here. */
-.scrollbar-top {
-  overflow-x: auto;
-  overflow-y: hidden;
-  height: 14px;
-  margin-bottom: 6px;
-  scrollbar-width: thin;
-  scrollbar-color: #39414e #14171c;
-}
-
-.scrollbar-top::-webkit-scrollbar {
-  height: 10px;
-}
-
-.scrollbar-top::-webkit-scrollbar-track {
-  background: #14171c;
-  border-radius: 5px;
-}
-
-.scrollbar-top::-webkit-scrollbar-thumb {
-  background: #39414e;
-  border-radius: 5px;
-}
-
-.scrollbar-top::-webkit-scrollbar-thumb:hover {
-  background: #4d5765;
-}
-
 .stage-row {
   position: relative;
   display: flex;
   align-items: flex-start;
-}
-
-.row-gutter {
-  flex: none;
-  display: block;
 }
 
 .stage {
@@ -312,12 +275,29 @@ button[aria-pressed="true"] {
   overflow-x: auto;
   overflow-y: hidden;
   outline: none;
-  /* Hidden here because .scrollbar-top is the one you see. */
-  scrollbar-width: none;
+  /* Styled explicitly so it is a classic, always-visible scrollbar: an overlay
+     one — the default on macOS and on Chromium with overlay scrollbars — would
+     be invisible until touched, and being visible is the point. */
+  scrollbar-width: thin;
+  scrollbar-color: #39414e #14171c;
 }
 
 .stage::-webkit-scrollbar {
-  display: none;
+  height: 10px;
+}
+
+.stage::-webkit-scrollbar-track {
+  background: #14171c;
+  border-radius: 5px;
+}
+
+.stage::-webkit-scrollbar-thumb {
+  background: #39414e;
+  border-radius: 5px;
+}
+
+.stage::-webkit-scrollbar-thumb:hover {
+  background: #4d5765;
 }
 
 .stage:focus-visible {
@@ -365,7 +345,7 @@ button[aria-pressed="true"] {
 
 .wall-tag {
   position: absolute;
-  left: 38px;
+  left: 0;
   line-height: 15px;
   font-size: 11px;
   letter-spacing: 0.04em;
