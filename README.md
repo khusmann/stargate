@@ -198,6 +198,8 @@ of each example as well as here:
   [Warping - procedural 2](https://www.shadertoy.com/view/lsl3RH).
 - **Ion Tunnel** — the analytic tunnel mapping, from Inigo Quilez's
   [tunnels article](https://iquilezles.org/articles/tunnel/).
+- **Tumbler** and **Colonnade** — both raymarch Inigo Quilez's exact rounded
+  box, from his [distance functions article](https://iquilezles.org/articles/distfunctions/).
 
 The rest are original, and all of them are rewritten rather than ported: no
 vectors, no allocation per pixel, and every one closes its loop exactly.

@@ -1062,6 +1062,10 @@ const tumbler = `export const name = "Tumbler", fps = 30, seconds = 20;
 // diffuse, specular, and rim, which is everything that makes a shape read as
 // solid rather than as a bright patch.
 //
+// The cube distance itself (see map() below) is Inigo Quilez's exact rounded
+// box, from his distance functions article:
+//   https://iquilezles.org/articles/distfunctions/
+//
 // The camera is where this differs from the tunnel and the fractal. Those two
 // squash the vertical field of view hard, which turns the strip into a slot and
 // is exactly right for something with no real scale. Cubes have a scale: stretch
@@ -1290,6 +1294,10 @@ const colonnade = `export const name = "Colonnade", fps = 30, seconds = 20;
 //
 // The subject is architecture, so it is vertical. Pillars running floor to
 // ceiling still read when they are four pixels wide; anything compact does not.
+//
+// The pillar distance (see box() below) is Inigo Quilez's exact rounded box,
+// same formula as Tumbler's cubes:
+//   https://iquilezles.org/articles/distfunctions/
 //
 // And the two strips are one flight looking opposite ways — forward down the
 // corridor on one wall, back the way you came on the other. That is a rotation
