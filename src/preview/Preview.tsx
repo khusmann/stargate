@@ -8,8 +8,9 @@
  *  Panning is a plain scroll container. It brings the wheel, the trackpad, the
  *  keyboard, and a position indicator with it, all of which would otherwise be
  *  hand-written — and its scrollbar takes space only when there is something to
- *  scroll, which at `fit` is never: fit is by definition the largest zoom that
- *  does fit. It appears when you pick a zoom above that.
+ *  scroll. Usually that's only once you pick a zoom above `fit`, but `fit`
+ *  itself is floored at LED_MIN_ZOOM, so on a viewport narrower than that it
+ *  scrolls too rather than shrinking the wall past readability.
  *
  *  No minimap. One would earn its place if the viewport showed a small fraction
  *  of the wall, but it barely does: at 8x in a 900 px window you can still see
@@ -34,10 +35,11 @@ import type { PixelStyle, Player } from "./player";
 const ZOOM_STEPS = [4, 6, 8, 10] as const;
 
 /** `fit` is not restricted to the ladder above — it takes the largest whole
- *  number of screen pixels per wall pixel that the viewport allows. The ladder
- *  is for choosing quickly; fit is for using the window. Restricting it to the
- *  listed steps left 400 px of dead space on a wide monitor (where 10x fits but
- *  13x also would) and overflowed by 400 px on a phone (where even 4x does not).
+ *  number of screen pixels per wall pixel that the viewport allows, floored at
+ *  LED_MIN_ZOOM. The ladder is for choosing quickly; fit is for using the
+ *  window. Restricting it to the listed steps left 400 px of dead space on a
+ *  wide monitor (where 10x fits but 13x also would) and, below the floor,
+ *  would have shrunk the wall past readability on a phone instead of scrolling.
  *
  *  The emitter view needs at least 4 px per pixel to read, so below that the
  *  preview falls back to flat squares on its own. */
@@ -80,7 +82,7 @@ export function Preview({ player }: PreviewProps): React.ReactElement {
   const [pixelStyle, setPixelStyle] = useState<PixelStyle>("led");
 
   const fitZoom = Math.max(
-    1,
+    LED_MIN_ZOOM,
     Math.min(FIT_MAX_ZOOM, Math.floor(viewWidth / WIDTH)),
   );
   const zoom = zoomChoice === "fit" ? fitZoom : zoomChoice;
