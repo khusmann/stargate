@@ -30,12 +30,21 @@ A single-page web app for authoring shows on a 192 x 24 LED installation. A show
 ## Stack
 
 - **TypeScript**, bundled by **esbuild** into a single self-contained HTML file. One command, no dev-server framework.
-- **No UI framework.** The interface is roughly eight controls and a canvas; vanilla TS with direct DOM calls is smaller and clearer than React here.
-- **CodeMirror 6** (`@codemirror/lang-javascript` + basic setup) for the editor.
+- **React** for the UI chrome. esbuild handles JSX with no extra configuration, and ~45 KB gzipped is minor next to CodeMirror. There is more interrelated state here than it first appears — current frame, playing, zoom, pan offset, error, export progress, selected example, and an overview rectangle that tracks pan — and it is well-represented in training data, which matters on a project where much of the code will be AI-written.
+- **CodeMirror 6** (`@codemirror/lang-javascript` + basic setup) for the editor. Mount it on a ref in an effect; do not add a React wrapper library.
 - **fflate** for the zip.
 - Deploys to **GitHub Pages**. `npm run build` must produce something Pages can serve statically.
 
-Keep the dependency list to those three. Anything else, ask first.
+Keep the dependency list to those four. Anything else, ask first.
+
+### The render loop does not go through React
+
+This is the one rule that matters. React owns the chrome — controls, gallery, error display, layout. The per-frame path does not touch it.
+
+- Advance the clock in a single `requestAnimationFrame` loop and write pixels straight to the canvas through a ref.
+- **Never call `setState` per frame.** At 30 fps that is a re-render every 33 ms for no benefit.
+- If a frame counter or scrub position must be displayed live, write `textContent` / the input's `value` directly in the same loop, or throttle updates to ~4 Hz.
+- React state changes when the *show* changes — new script, new zoom level, play/pause toggled — not when a frame does.
 
 ## The runtime
 
@@ -105,9 +114,10 @@ Copies a self-contained authoring brief to the clipboard: `stargate.d.ts`, the c
 1. Rendering the preview as one 192 x 24 rectangle. The split is the product.
 2. Fractional zoom, or smoothed scaling in the preview.
 3. Allocating an object, array, or string per pixel.
-4. Letting a throw inside `pixel` fire thousands of times.
-5. Buffering the whole zip in one `ArrayBuffer`.
-6. Guessing which strip to reverse.
+4. Driving the frame loop through React state.
+5. Letting a throw inside `pixel` fire thousands of times.
+6. Buffering the whole zip in one `ArrayBuffer`.
+7. Guessing which strip to reverse.
 
 ## Definition of done
 
