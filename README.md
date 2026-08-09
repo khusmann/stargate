@@ -6,8 +6,8 @@ watch it on the real geometry, export the baked PNG frames as a zip.
 
 No server, no install, no accounts. A show is a file of code.
 
-See [DESIGN.md](DESIGN.md) for why it is built this way, [CLAUDE.md](CLAUDE.md)
-for the hardware, and [IMPLEMENT.md](IMPLEMENT.md) for the v1 brief.
+See [DESIGN.md](DESIGN.md) for why it is built this way, and
+[RESOURCES.md](RESOURCES.md) for the hardware and file-format background.
 
 ## Running it
 
@@ -28,6 +28,9 @@ The single-file build is the offline path: if the machine running Light System
 Composer has no internet, copy that one HTML file across and double-click it.
 Everything works from `file://`, which is why export is a zip download rather
 than the File System Access API.
+
+`base` in `vite.config.ts` is `/stargate/` to match the repository name. If the
+repo is ever renamed, update it too, or every asset 404s.
 
 ## Writing a show
 
@@ -117,7 +120,8 @@ than deflated (PNG is already compressed) and the zip is streamed into a Blob,
 so peak memory stays flat however long the show is.
 
 `.sho` generation is deliberately **not** in v1: it is blocked on the hardware
-questions in *Risk gates* in DESIGN.md. Load the frames by hand in Show Designer
+questions in *Risk gates* in DESIGN.md, which [spike/README.md](spike/README.md)
+is the test plan to resolve at the wall. Load the frames by hand in Show Designer
 (New Effect → Animation → Group `All (front)` → Browse to `frames` → Load, then
 fps 30, scale 1, smooth **off**). The seam where `.sho` slots in is one
 `zip.add()` in `src/export/exportShow.ts`.
@@ -203,17 +207,3 @@ of each example as well as here:
 
 The rest are original, and all of them are rewritten rather than ported: no
 vectors, no allocation per pixel, and every one closes its loop exactly.
-
-## One-time setup for GitHub Pages
-
-Not automated, and not something the build can do for you:
-
-1. **Create the GitHub remote and push.** The repo has none yet, so nothing in
-   `.github/workflows/deploy.yml` runs until it does.
-2. **Settings → Pages → Source: GitHub Actions.**
-3. **Pages on a private repo needs a paid plan.** If the repo stays private on a
-   free account, publishing will fail and `npm run build:single` becomes the
-   only distribution path — which is a fine place to be.
-
-`base` in `vite.config.ts` is `/stargate/` to match the repository name. If the
-repo is renamed, change it, or every asset 404s.

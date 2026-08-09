@@ -1,10 +1,11 @@
 # Design
 
-Design decisions for the Stargate authoring tool. See [CLAUDE.md](CLAUDE.md) for the
-hardware and show-format background, [RESOURCES.md](RESOURCES.md) for the resource index.
+Design decisions for the Stargate authoring tool. See [RESOURCES.md](RESOURCES.md) for
+the hardware, show-format, and resource background.
 
-Status: **pre-implementation.** Two risk gates (below) are unresolved and either could
-change the shape of this.
+Status: **v1 is built and deployed.** The two risk gates below are still open; resolving
+them is a wall test, not a code change — see [spike/README.md](spike/README.md) for the
+test plan in flight.
 
 ---
 
@@ -67,10 +68,9 @@ It also dissolves a constraint the old design worked around. "Preview replays th
 frames" existed to guarantee preview and build agreed; client-side they are the same code
 path by construction.
 
-TypeScript costs a bundler. **Vite**, with React for the UI chrome — see
-[IMPLEMENT.md](IMPLEMENT.md) for the stack and the reasoning. Types are worth the build
-step on a project where much of the code will be AI-written, since they catch most of
-what goes wrong there.
+TypeScript costs a bundler: **Vite**, with React for the UI chrome. Types are worth the
+build step on a project where much of the code will be AI-written, since they catch most
+of what goes wrong there.
 
 **A headless CLI stays available later** without a rewrite: the same TS runs under
 Node/Deno/Bun behind a thin command. Go had the opposite property — a Go renderer can
