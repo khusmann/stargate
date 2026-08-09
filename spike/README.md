@@ -1,11 +1,8 @@
 # Stargate test pattern
 
-A short test show for the wall. It answers four questions we can't answer from the
-files alone, and it should take about ten minutes at the LSC machine.
+A short test show for the wall. It answers five questions we can't answer from the files alone, and it should take about ten minutes at the LSC machine.
 
-It's a 45 second loop of 9 patterns, 5 seconds each — long enough to get a photo of
-each one. There are three `.sho` files; the first two are **identical except for one
-setting**, so play both and compare.
+It's a 45 second loop of 9 patterns, 5 seconds each — long enough to get a photo of each one. There are three `.sho` files; the first two are **identical except for one setting**, so play both and compare.
 
 ## Setup
 
@@ -15,24 +12,17 @@ setting**, so play both and compare.
    G:/My Drive/Fuse Live Arts/Artwork/Stargate/Shows/Stargate Test/
    ```
 
-   so that the frames end up at `.../Stargate Test/frames/test-00001.png` and so on.
-   If it has to go somewhere else, open the `.sho` in a text editor and fix the
-   `<animationdir>` line to match — that's expected, and knowing whether that edit
-   works is itself one of the things we're testing.
+   so that the frames end up at `.../Stargate Test/frames/test-00001.png` and so on. If it has to go somewhere else, open the `.sho` in a text editor and fix the `<animationdir>` line to match — that's expected, and knowing whether that edit works is itself one of the things we're testing.
 
 2. Load `Stargate Test (smooth 0).sho` in Light System Composer and play it.
 
 3. Then load `Stargate Test (smooth 1).sho` and play that.
 
-4. Last, load `Stargate Test (relative path).sho`. This one is a long shot — it points
-   at the frames without spelling out the full `G:/...` path. **We expect it to fail**,
-   and that's fine; we just need to know. If it plays, say so, because it would save us
-   a setting later.
+4. Last, load `Stargate Test (relative path).sho`. This one is a long shot — it points at the frames without spelling out the full `G:/...` path. **We expect it to fail**, and that's fine; we just need to know. If it plays, say so, because it would save us a setting later.
 
 ## If the .sho files won't load
 
-Tell us — that's useful on its own. But **please don't stop there**, because the
-patterns still answer the more important question. Build it by hand instead:
+Tell us — that's useful on its own. But **please don't stop there**, because the patterns still answer the more important question. Build it by hand instead:
 
 1. Show Designer → load the usual `.map`
 2. New Effect → **Animation**
@@ -41,13 +31,11 @@ patterns still answer the more important question. Build it by hand instead:
 5. Set **fps 30**, **scale 1**, and make sure **smooth is OFF**
 6. Play it — then repeat with **smooth ON** and compare
 
-That comparison is the whole point of the two `.sho` files, so doing it manually gets
-us the same answer.
+That comparison is the whole point of the two `.sho` files, so doing it manually gets us the same answer.
 
 ## What to look for
 
-Otherwise, here's the loop in order. Each pattern holds for 5 seconds, so there's time
-to get a photo. The patterns at 20–35 s are the ones where a photo really helps.
+Here's the loop in order. Each pattern holds for 5 seconds, so there's time to get a photo. The patterns at 20–35 s are the ones where a photo really helps.
 
 | Time | Pattern | What we're asking |
 |---|---|---|
@@ -73,8 +61,7 @@ If both files look the same, tell us that too — it's just as informative.
 ## What to send back
 
 1. Did it load? Did you have to edit the path?
-2. Which end was white, and which side of the room was green? (a photo of each is
-   perfect)
+2. Which end was white, and which side of the room was green? (a photo of each is perfect)
 3. For each of the two files: were the stripes crisp or washed out?
 4. Did the third file (relative path) play, or not?
 5. Anything that looked broken, dead, or backwards.
