@@ -64,32 +64,32 @@ It also dissolves a constraint the old design worked around. "Preview replays th
 frames" existed to guarantee preview and build agreed; client-side they are the same code
 path by construction.
 
-TypeScript costs a bundler — one `esbuild` command to inline everything into a single
-HTML file. Worth it on a project where much of the code will be AI-written, since types
-catch most of what goes wrong there.
+TypeScript costs a bundler. **Vite**, with React for the UI chrome — see
+[IMPLEMENT.md](IMPLEMENT.md) for the stack and the reasoning. Types are worth the build
+step on a project where much of the code will be AI-written, since they catch most of
+what goes wrong there.
 
 **A headless CLI stays available later** without a rewrite: the same TS runs under
 Node/Deno/Bun behind a thin command. Go had the opposite property — a Go renderer can
 never run in the browser.
 
-### The UI is an editor and a drop target
+### The UI is an editor
 
 - **Write JS** in a **CodeMirror 6** pane, hot-reloading onto the preview
-- **Drop assets** — images a script can load
 - **Copy AI prompt** — puts the full authoring context on the clipboard (API reference,
   ceiling geometry, a worked example, the constraints). Paste into any assistant, get a
   show back, paste it into the editor.
 
 The prompt button is how a non-programmer uses this. It replaces the folder-drop path
-that earlier drafts treated as the friend's entry point.
+that earlier drafts treated as the friend's entry point. There is no asset drop target in
+v1 — a show is code and nothing else.
 
 **Why CodeMirror rather than a `<textarea>`.** The AI workflow means routinely pasting
 large blobs of unfamiliar code, which is exactly where a textarea is worst — no
 highlighting to sanity-check against, no folding, no structure. And the payoff is
-**inline error markers**: when a generated show throws, the gutter points at the line.
-esbuild is already in the build, so bundling `@codemirror/lang-javascript` plus basic
-setup costs nothing but bytes (~100–130 KB gzipped), which matters only to the offline
-single-file artifact and is acceptable there.
+**inline error markers**: when a generated show throws, the gutter points at the line. It
+costs ~100–130 KB gzipped, which matters only to the offline single-file artifact and is
+acceptable there.
 
 Show scripts are plain JS at runtime even though the app is TypeScript, so the JS
 language mode is the right one.
