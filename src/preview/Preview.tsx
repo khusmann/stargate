@@ -114,6 +114,15 @@ export function Preview({ player }: PreviewProps): React.ReactElement {
     return () => observer.disconnect();
   }, []);
 
+  // Open on the horizontal center rather than the native scrollLeft-0 default.
+  const centered = useRef(false);
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el || centered.current || !scrolls) return;
+    el.scrollLeft = (contentWidth - el.clientWidth) / 2;
+    centered.current = true;
+  }, [scrolls, contentWidth]);
+
   // Keep the column that was in the middle of the view in the middle of it.
   const holdColumn = useRef<number | null>(null);
   const zoomTo = (next: number | "fit"): void => {
