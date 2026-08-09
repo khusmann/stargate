@@ -26,8 +26,7 @@ npm run dev          # http://localhost:5173/stargate/
 
 The single-file build is the offline path: if the machine running Light System
 Composer has no internet, copy that one HTML file across and double-click it.
-Everything works from `file://`, which is why export is a zip download rather
-than the File System Access API.
+It works from `file://`, same as the regular build.
 
 `base` in `vite.config.ts` is `/stargate/` to match the repository name. If the
 repo is ever renamed, update it too, or every asset 404s.
@@ -71,45 +70,18 @@ Two strips with a fixed screen-space gap, integer zoom only, nearest-neighbour.
 A column ruler along the bottom marks column 96, the controller seam, and the
 ends of the wall.
 
-**Two pixel modes.** *LEDs* is the default: round emitters on a dark pitch, the
-gap about the size of an emitter, which is what the ceiling actually is. *Flat*
-is what the exported frames contain — contiguous squares, one texel per wall
-pixel — and is the one to switch to when you need to read exact pixels.
+**Two pixel modes.** *LEDs* (the default) draws round emitters on a dark pitch
+with a soft bloom, matching what the diffused ceiling looks like. *Flat* draws
+contiguous squares, one texel per wall pixel, matching what the exported
+frames contain — switch to it to read exact pixel values.
 
-The LED view is a mask, not per-pixel drawing. The strip is blitted blocky at
-device resolution, a repeating emitter pattern is punched through it with
-`destination-in`, and then the same frame is added back on top bilinearly with
-`lighter` — which is the bloom, and the reason it does not look dim. Masking
-alone throws away about 80% of the light, because that is how much of the wall
-is dark gap; the halo is what a real diffuser puts back. Three draw calls per
-strip rather than 4,608 arcs, and it holds 60 fps at 10x.
+**Zoom** steps 4x / 6x / 8x / 10x. `fit` picks the largest integer zoom that
+fills the window, up to 16x. Below 4x, LEDs mode isn't legible, so the preview
+falls back to flat squares and the LEDs button disables itself.
 
-**No brightness is scaled anywhere.** The emitter is the show's own colour and
-the halo is that colour at lower alpha, so an author judging output levels is
-judging the real ones. Boosting the colours to match the flat view would have
-been the easy fix and the wrong one. Export is untouched either way.
-
-**Zoom.** The ladder is 4x / 6x / 8x / 10x — it starts at 4x because below that
-an emitter and its gap would be one screen pixel each. `fit` is not restricted
-to the ladder: it takes the largest whole number of screen pixels per wall pixel
-the window allows, up to 16x. That matters at both ends. Restricted to the
-ladder it left 580 px of dead space on an ultrawide (10x fits, but so does 13x)
-and overflowed by 400 px on a phone, where even 4x does not fit. Below 4x the
-emitter view is unreadable, so it falls back to flat squares on its own and the
-LEDs button disables itself.
-
-Panning is a plain scroll container, with a native scrollbar that appears only
-when there is something to scroll. Note one deliberate departure from *Preview*
-in DESIGN.md, made at the bench: there is **no overview bar**. It would earn its
-place if the viewport showed a small fraction of the wall, but it does not —
-even at 8x in a 900 px window you can see 54% of the columns, and a full-width
-overview of all 192 would be about 8 px per column, the zoom you are already at.
-
-A phone held upright gets 1x and the flat-square view; turning it sideways is
-worth about 4x and puts the LED view back. There is no banner saying so — fit
-guarantees the whole wall is on screen either way, so rotating is a preference,
-and a warning-coloured bar advising a preference collided with the shared-link
-consent alert on the one visit where that alert most needs to be read alone.
+Panning is a plain scroll container with a native scrollbar. On a phone,
+portrait gives 1x and flat squares; landscape gives roughly 4x and the LED
+view back.
 
 ## Export
 
@@ -162,9 +134,7 @@ exercised in the app.
 ## Running someone else's show
 
 A show is arbitrary JavaScript, executed with `new Function` in this page's
-origin. For code you typed or pasted deliberately that is the same trust as any
-other snippet you run. The sharp edge is the share link, because it is the one
-way somebody else's code arrives — so:
+origin. The share link is the one path where someone else's code arrives, so:
 
 - **A link never runs on its own.** Its show is loaded into the editor to be
   read, behind a *Run it / Discard* bar. This covers both following a link and
@@ -173,22 +143,18 @@ way somebody else's code arrives — so:
 - **A link never touches saved work.** Nothing from an unaccepted link is
   written to `localStorage`, so opening one cannot plant a payload that runs on
   every later visit.
-- **The build ships a CSP** with `connect-src 'none'`. The app makes no network
-  requests after load, so denying them removes exfiltration outright. It cannot
-  drop `unsafe-eval` — `new Function` is the show runtime — so this is defence
-  in depth, not a sandbox. Dev builds skip it, because Vite's hot reload needs a
-  websocket.
+- **The build ships a CSP** with `connect-src 'none'`, so a running show can't
+  make network requests. It still needs `unsafe-eval` for `new Function`. Dev
+  builds skip the CSP, since Vite's hot reload needs a websocket.
 - **`#new` is the escape hatch.** An endless loop in `pixel` freezes the tab, and
   the script is restored from storage on the next visit, so the freeze would
   repeat. Opening `…/stargate/#new` clears storage and starts from the default
   without running anything.
 
-What none of this fixes: a show you choose to run can still read the origin's
-`localStorage` and rewrite the page, and on GitHub Pages that origin is shared
-with every other project page on the same account. Proper isolation means
-running shows in a sandboxed iframe or a worker with an opaque origin — the
-route CodePen and JSFiddle take by serving user code from a separate domain.
-That is a v2 change, not a v1 patch.
+A running show can still read this origin's `localStorage` and rewrite the
+page — and on GitHub Pages, that origin is shared with every other project
+page on the account. Full isolation would need a sandboxed iframe or worker on
+a separate origin; not done yet.
 
 ## Credits
 
