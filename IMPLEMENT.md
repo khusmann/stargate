@@ -204,6 +204,58 @@ Copies a self-contained authoring brief to the clipboard: `stargate.d.ts`, the c
 
 `stargate.d.ts` is the single source of truth for three consumers: this prompt, the editor's completions, and human documentation. Drive CodeMirror's completion source from it rather than duplicating the symbol list. Keep the whole payload under ~100 lines — an API that doesn't fit in one prompt is one an AI will hallucinate against.
 
+## Deployment
+
+Add `.github/workflows/deploy.yml` — build on push and publish to Pages. Roughly:
+
+```yaml
+name: Deploy
+on:
+  push: { branches: [master] }     # note: master, not main
+  workflow_dispatch:
+
+permissions: { contents: read, pages: write, id-token: write }
+concurrency: { group: pages, cancel-in-progress: true }
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck        # see below
+      - run: npm run build
+      - run: npm run build:single
+      - run: cp dist-single/index.html dist/offline.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: dist }
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+```
+
+Four things that bite here:
+
+- **Vite does not typecheck.** `vite build` strips types with esbuild and will happily ship broken TypeScript. Add a `typecheck` script running `tsc --noEmit` and run it in CI, or type errors are decorative.
+- **Set `base` in `vite.config.ts`.** A project Pages site is served from `/<repo>/`, so the default base of `/` makes every asset 404. This is the single most common Pages failure.
+- **Publish the offline build alongside the site** (the `cp` step above) and link to it from the app, so the self-contained file has a distribution path without a separate release process.
+- **Branch is `master`** in this repo, not `main`.
+
+Manual, one-time, and not yours to do — flag them for the repo owner rather than trying:
+
+1. The repo has **no GitHub remote yet**. It has to be created and pushed before any of this runs.
+2. Repository Settings → Pages → Source must be set to **GitHub Actions**.
+3. **Pages on a private repo requires a paid plan.** If the repo is private on a free account, publishing will fail and the single-file build becomes the only distribution path.
+
 ## Easy things to get wrong
 
 1. Rendering the preview as one 192 x 24 rectangle. The split is the product.
@@ -222,4 +274,5 @@ Copies a self-contained authoring brief to the clipboard: `stargate.d.ts`, the c
 - Editing the script updates the preview without a reload; a syntax error shows an inline marker and keeps the last good frame.
 - Zoom, pan, overview, and transport all behave as specified.
 - Export produces a zip whose frames decode as 192 x 24 PNGs. Include a check — even a script that renders a known pattern and asserts a few pixel values — so this is verified rather than assumed.
-- README covers `npm run dev`, `npm run build`, and how to deploy to Pages.
+- `npm run typecheck` passes, and CI runs it — Vite alone will not catch type errors.
+- README covers `npm run dev`, `npm run build`, `npm run build:single`, and the one-time Pages setup.
