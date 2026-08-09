@@ -41,7 +41,6 @@ export function App(): React.ReactElement {
   const [exportState, setExportState] = useState<ExportState>({ status: "idle" });
   const [status, setStatus] = useState<string | null>(null);
   const [seam, setSeam] = useState<string | null>(null);
-  const [rotateHint, setRotateHint] = useState(true);
 
   const readouts = useRef<Readouts>({ clock: null, scrub: null });
   const abort = useRef<AbortController | null>(null);
@@ -177,24 +176,6 @@ export function App(): React.ReactElement {
 
   return (
     <div className="app">
-      {/* Only rendered at all in narrow portrait — see the media query. Nothing
-          here fits an upright phone: the wall is 16:1, code lines wrap, and the
-          header stacks three deep. So it sits above the header as a bar about
-          the whole page, not a note attached to any one pane. Rotating hides it
-          without needing to dismiss it. */}
-      {rotateHint && (
-        <div className="rotate-hint">
-          <span>Turn your phone sideways — this page needs the width.</span>
-          <button
-            type="button"
-            aria-label="Dismiss"
-            onClick={() => setRotateHint(false)}
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
       <header className="topbar">
         <div className="topbar-left">
           <h1>Stargate</h1>

@@ -299,39 +299,12 @@ button[aria-pressed="true"] {
   transition: width 120ms linear;
 }
 
-/* Hidden everywhere except a phone held upright, where it is actually true. */
-.rotate-hint {
-  display: none;
-}
-
-/* Full-bleed and flush above the topbar: it is page chrome, not a card in the
-   content column, so it gets no side margin and no radius — only the bottom
-   edge, which reads as the top of the header stack. */
-@media (max-width: 760px) and (orientation: portrait) {
-  .rotate-hint {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex: none;
-    padding: 8px 14px;
-    border-bottom: 1px solid #8a6a12;
-    background: #2a2107;
-    color: #ffd76a;
-    font-size: 13.5px;
-    font-weight: 600;
-    line-height: 1.4;
-  }
-
-  .rotate-hint button {
-    margin-left: auto;
-    flex: none;
-    padding: 2px 8px;
-    font-size: 13px;
-    background: transparent;
-    border-color: #6b5410;
-    color: #ffd76a;
-  }
-}
+/* There was a portrait "turn your phone sideways" bar here. It was written when
+   the preview overflowed a phone, and the fit-to-window work made its premise
+   false: fit is floor(viewWidth / 192) with a floor of 1, so the whole wall is
+   always on screen. What was left was a warning-coloured banner advising a
+   preference, stacking with the consent alert on exactly the visit — a shared
+   link opened on a phone — where the alert most needs to be read alone. */
 
 /* A show from a link is the one way somebody else's code gets here, so it asks
    before running. Deliberately loud, and directly above the preview it is

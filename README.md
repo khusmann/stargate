@@ -102,8 +102,11 @@ place if the viewport showed a small fraction of the wall, but it does not —
 even at 8x in a 900 px window you can see 54% of the columns, and a full-width
 overview of all 192 would be about 8 px per column, the zoom you are already at.
 
-On a phone held upright a banner suggests turning it sideways, which is the
-difference between 1x and 4x.
+A phone held upright gets 1x and the flat-square view; turning it sideways is
+worth about 4x and puts the LED view back. There is no banner saying so — fit
+guarantees the whole wall is on screen either way, so rotating is a preference,
+and a warning-coloured bar advising a preference collided with the shared-link
+consent alert on the one visit where that alert most needs to be read alone.
 
 ## Export
 
