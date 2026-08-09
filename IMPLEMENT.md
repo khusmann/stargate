@@ -33,9 +33,9 @@ A single-page web app for authoring shows on a 192 x 24 LED installation. A show
 - **React** for the UI chrome. ~45 KB gzipped is minor next to CodeMirror. There is more interrelated state here than it first appears — current frame, playing, zoom, pan offset, error, export progress, selected example, and an overview rectangle that tracks pan — and it is well-represented in training data, which matters on a project where much of the code will be AI-written.
 - **CodeMirror 6** (`@codemirror/lang-javascript` + basic setup) for the editor. Mount it on a ref in an effect; do not add a React wrapper library.
 - **fflate** for the zip.
-- Deploys to **GitHub Pages**. `npm run build` must produce something Pages can serve statically.
+- Deploys to **GitHub Pages**.
 
-Two build outputs, from the same source: the normal Pages build, and a **single self-contained HTML file** (`vite-plugin-singlefile`) that works opened directly from disk. The second is the offline path if the LSC machine turns out to have no internet. Note the plugin needs code-splitting disabled and a high `assetsInlineLimit`.
+Two build outputs from the same source: `npm run build` for Pages, and `npm run build:single` for a **single self-contained HTML file** (`vite-plugin-singlefile`) that works opened directly from disk. The second is the offline path if the LSC machine turns out to have no internet. Note the plugin needs code-splitting disabled and a high `assetsInlineLimit`.
 
 Keep the dependency list to Vite, React, CodeMirror, fflate, and the singlefile plugin. Anything else, ask first.
 
@@ -66,6 +66,15 @@ export function draw(ctx, t)   { ... }   // CanvasRenderingContext2D, 192x24
 
 Evaluate show code with `new Function` or a blob module import — your call, but syntax errors and runtime throws must both be catchable and must carry a line number.
 
+### How a frame gets rendered
+
+Both entry points write into one 192 x 24 canvas, in this order:
+
+1. Run `pixel` over all 4,608 positions into a **reused `ImageData` buffer**, allocated once and kept — not per frame. Then one `putImageData`. Do **not** call `fillRect` per pixel; 4,608 canvas calls per frame is orders of magnitude slower than one buffer write.
+2. Then call `draw(ctx, t)`, whose ordinary canvas operations composite on top. `putImageData` ignores transforms and `globalAlpha`, which is exactly why it goes first.
+
+Unpack the packed integer inline (`c >> 16 & 255`, etc.) straight into the buffer. No intermediate colour objects.
+
 **Error handling matters here.** `pixel` runs 4,608 times per frame, so a throw must not fire 4,608 times. Catch the first one, stop rendering, surface it as an inline CodeMirror marker on the offending line, and leave the last good frame on screen.
 
 ## The preview
@@ -86,7 +95,13 @@ There is a working reference for the two-strip layout, zoom, and transport in [s
 
 Render every frame and download **one zip containing `frames/frame-%05d.png`**, 1-based, zero-padded to 5. That naming matches the convention already in use on this installation.
 
-Two implementation requirements, both cheap and both load-bearing at longer show lengths:
+Export is **not** the preview loop. Three consequences:
+
+- **Time is synthetic.** Frame `i` is rendered at `t = i / fps`, iterating `fps * seconds` frames as fast as the machine can. Never drive export from `requestAnimationFrame` or wall-clock time — a 45 s show would take 45 s and drop frames under load.
+- **Always render at exactly 192 x 24**, on an offscreen canvas, regardless of the preview's zoom. Never read pixels back from the zoomed preview.
+- **Yield periodically** (every ~20 frames) so the progress indicator updates and the tab stays responsive. 1,350 frames of synchronous work will otherwise freeze the UI.
+
+Two more requirements, both cheap and both load-bearing at longer show lengths:
 
 - **Store, don't deflate.** PNGs are already compressed; re-deflating costs CPU and memory for nothing. Use fflate's level 0 for frames.
 - **Stream it.** Encode one frame, discard its pixel buffer, feed fflate's streaming API, and accumulate chunks into a `Blob` — not one giant `ArrayBuffer`. Blob backing spills to disk; a typed array doesn't. Peak memory must be flat in show length, not linear.
@@ -142,7 +157,9 @@ export function pixel(x, y, t) {
 }
 ```
 
-**3. Starfield** — the `draw` demo. Discrete, hard-edged, stateful: exactly what a shader is bad at. Note the per-star allocation is fine at 60 objects per frame; the rule is only about per-*pixel* allocation.
+**3. Starfield** — the `draw` demo. Discrete, hard-edged, stateful: exactly what a shader is bad at. The per-star string allocation is fine at 60 objects per frame; the rule is only about per-*pixel* allocation.
+
+It also has an instructive flaw: the unseeded `Math.random()` means the star layout changes every time the script is re-evaluated, so an export won't match what was on screen. Harmless here, but it shows that shows are only reproducible if they're deterministic. If this becomes annoying, the fix is a seeded PRNG exposed as a global alongside `rgb`/`hsl` — not needed for v1.
 
 ```js
 export const name = "Starfield", fps = 30, seconds = 20;
@@ -191,15 +208,16 @@ Copies a self-contained authoring brief to the clipboard: `stargate.d.ts`, the c
 
 1. Rendering the preview as one 192 x 24 rectangle. The split is the product.
 2. Fractional zoom, or smoothed scaling in the preview.
-3. Allocating an object, array, or string per pixel.
+3. Allocating an object, array, or string per pixel, or calling `fillRect` per pixel instead of writing one `ImageData`.
 4. Driving the frame loop through React state.
-5. Letting a throw inside `pixel` fire thousands of times.
-6. Buffering the whole zip in one `ArrayBuffer`.
-7. Guessing which strip to reverse.
+5. Driving *export* from the animation loop, so it runs in real time instead of as fast as possible.
+6. Letting a throw inside `pixel` fire thousands of times.
+7. Buffering the whole zip in one `ArrayBuffer`.
+8. Guessing which strip to reverse.
 
 ## Definition of done
 
-- `npm run build` emits a self-contained HTML file that works when opened directly from disk.
+- `npm run build` produces a Pages-servable site; `npm run build:single` produces a self-contained HTML file that works opened directly from disk.
 - Loading the app with no saved state shows a bundled example, animating.
 - Editing the script updates the preview without a reload; a syntax error shows an inline marker and keeps the last good frame.
 - Zoom, pan, overview, and transport all behave as specified.
