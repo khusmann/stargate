@@ -372,6 +372,26 @@ button[aria-pressed="true"] {
   font-size: 12px;
 }
 
+.scroll-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: #8b93a1;
+  text-align: center;
+}
+
+.rotate-hint {
+  display: none;
+}
+
+/* Rotating only widens the viewport on a phone held upright — a desktop
+   window or an already-landscape device gets nothing from it, so this half
+   of the hint is gated to devices where it actually helps. */
+@media (orientation: portrait) and (pointer: coarse) {
+  .rotate-hint {
+    display: inline;
+  }
+}
+
 /* The frame holds the scroller and the ruler.
    It shrink-wraps the strips. Zoom is a whole number of screen pixels per wall
    pixel, so what fits is 192 x N and the leftover is whatever the window has

@@ -262,6 +262,17 @@ export function Preview({ player }: PreviewProps): React.ReactElement {
         </div>
       </div>
 
+      {scrolls && (
+        // Mobile browsers hide the scrollbar outside of an active touch drag,
+        // so the styled one below is not a reliable "there's more" signal
+        // there — this text is. Rotating only helps a phone in portrait, so
+        // that half is CSS-gated to `orientation: portrait` + coarse pointer.
+        <p className="scroll-hint">
+          ↔ drag to see more
+          <span className="rotate-hint">, or rotate for more room</span>
+        </p>
+      )}
+
       <div className="stage-frame">
         <div className="stage-row">
           <div
