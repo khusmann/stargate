@@ -133,7 +133,7 @@ button[aria-pressed="true"] {
     grid-template-areas:
       "left centre"
       "right right";
-    row-gap: 8px;
+    row-gap: 18px;
   }
 
   .topbar-left {
@@ -155,7 +155,7 @@ button[aria-pressed="true"] {
   .topbar-right {
     grid-area: right;
     flex-wrap: wrap;
-    justify-content: flex-start;
+    justify-content: center;
     gap: 6px;
   }
 
