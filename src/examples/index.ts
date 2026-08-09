@@ -192,45 +192,108 @@ export function pixel(x, y, t) {
 }
 `;
 
-const ember = `export const name = "Ember", fps = 30, seconds = 20;
+const flames = `export const name = "Flames", fps = 30, seconds = 20;
 
-// Fire read sideways: heat enters along one edge of each strip and decays
-// across it. The palette is the whole effect — black, red, orange, white, in
-// that order, with brightness carrying the shape.
+// Fire read sideways: it burns along one edge of each strip and licks across
+// the twelve rows. Three things make it read as fire rather than as a red band,
+// and all three are geometry, not colour:
 //
-// The flicker is stepped at STEPS per second and the step index is taken mod
-// the number of steps in the show, so the flicker sequence repeats exactly.
-const STEPS = 6;
-const TOTAL_STEPS = STEPS * seconds;
-const W = ((Math.PI * 2) / seconds) * 7;          // 7 breaths per loop
+//   1. a silhouette — how far the flame reaches varies along the wall, so the
+//      top edge is jagged and every lick has its own height,
+//   2. a soft tip — EDGE rows of fade at the top, so licks dissolve instead of
+//      being cut off, and
+//   3. churn that climbs — a second field advected across the strip at RISE,
+//      which is what carries the eye upward.
+//
+// Nothing is stepped. Flicker by re-hashing a lattice a few times a second is
+// what makes a fire shader jitter; here every time term is a smooth noise
+// coordinate, so the motion is continuous at any fps.
+//
+// The loop closes because both fields tile in both axes and every shift covers
+// a whole number of periods in \`seconds\`:
+//
+//   drift    WIND * seconds / CELL = 60 = 2 * PU
+//   flicker  FLICK * seconds       = 60 = 4 * PT
+//   drift    WIND * seconds / TX   = 60 = 3 * TPX
+//   climb    RISE * seconds / TY   = 20 = 2 * TPY
+//
+// Every octave doubles its coordinate *and* its period, so the doubled octaves
+// tile on the same shifts. Retune anything above and re-check all four.
+const RISE = 16;      // rows/s the churn climbs across the strip
+const WIND = 18;      // px/s the whole fire drifts along the wall
+const FLICK = 3;      // silhouette flicker, in noise cells per second
+const EDGE = 2.2;     // rows of soft tip
 
-function hash(n) {
-  const s = Math.sin(n * 12.9898) * 43758.5453;
+const CELL = 6;                 // silhouette cell, px along the wall
+const PU = 30, PT = 15;         // and its periods, in cells
+const TX = 6, TY = 16;          // churn cell: px along the wall x rows across
+const TPX = 20, TPY = 10;
+
+// Fire is not a hue sweep, it is a black-body ramp — hsl() cannot do this, and
+// linear channel ramps land on a washed-out yellow. Stops, interpolated.
+const STOPS = [
+  [0.00, 0, 0, 0],
+  [0.13, 60, 0, 0],
+  [0.36, 180, 26, 0],
+  [0.62, 255, 105, 6],
+  [0.84, 255, 195, 55],
+  [1.00, 255, 236, 168],
+];
+
+function fire(v) {
+  let i = 1;
+  while (i < STOPS.length - 1 && v > STOPS[i][0]) i++;
+  const a = STOPS[i - 1], b = STOPS[i];
+  const f = (v - a[0]) / (b[0] - a[0]);
+  return rgb(a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f, a[3] + (b[3] - a[3]) * f);
+}
+
+function hash(x, y) {
+  const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
   return s - Math.floor(s);
 }
 
-function heat(x, t) {
-  const step = Math.floor(t * STEPS) % TOTAL_STEPS;
-  const cell = Math.floor(x * 0.35);
-  const f = (x * 0.35) % 1;
-  const smooth = f * f * (3 - 2 * f);
-  const a = hash(cell + step * 71);
-  const b = hash(cell + 1 + step * 71);
-  return (a + (b - a) * smooth) * 0.7
-       + 0.3 * (0.5 + 0.5 * Math.sin(x * 0.09 - W * t));
+function wrap(v, p) {
+  return ((v % p) + p) % p;
+}
+
+// Value noise that tiles in *both* axes, so any constant offset still closes —
+// which is what lets the two walls share one field at different offsets.
+function noise(x, y, px, py) {
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const fx = x - xi, fy = y - yi;
+  const u = fx * fx * (3 - 2 * fx);               // smoothstep, not lerp:
+  const w = fy * fy * (3 - 2 * fy);               // kills the grid artefacts
+  const x0 = wrap(xi, px), x1 = wrap(xi + 1, px);
+  const y0 = wrap(yi, py), y1 = wrap(yi + 1, py);
+  const a = hash(x0, y0), b = hash(x1, y0), c = hash(x0, y1), d = hash(x1, y1);
+  return a + (b - a) * u + (c - a) * w + (a - b - c + d) * u * w;
 }
 
 export function pixel(x, y, t) {
-  const row = y % 12;
-  const fuel = heat(x, t) * (1.25 - row / 9);      // hottest along one edge
-  const v = Math.max(0, Math.min(1, fuel - row * 0.045));
+  const row = y % 12;                             // 0 is the burning edge
+  const seed = y < 12 ? 0 : 53.5;                 // two fires, not one twice
+  const drift = x + WIND * t;
 
-  // Hand-rolled palette rather than hsl(): fire is not a hue sweep, it is a
-  // black-body ramp, and the red channel has to saturate long before green.
-  const r = Math.min(1, v * 2.4);
-  const g = Math.max(0, Math.min(1, v * 1.7 - 0.55));
-  const b = Math.max(0, v * 3.1 - 2.5);
-  return rgb(r * 255, g * 255, b * 255);
+  // The silhouette. The second octave is what breaks the top edge into licks a
+  // few pixels wide instead of one rolling hill.
+  const u = drift / CELL + seed;
+  const v = t * FLICK;
+  const hN = noise(u, v, PU, PT) * 0.6 + noise(u * 2, v * 2, PU * 2, PT * 2) * 0.4;
+  const h = 0.8 + hN * 12;                        // rows this lick reaches
+
+  const tip = Math.min(1, (h - row) / EDGE);
+  if (tip <= 0) return 0;                         // above the flame, nothing
+
+  // The churn, sampled in the frame it is moving in: row - RISE * t climbs.
+  const climb = (row - RISE * t) / TY;
+  const tex = noise(drift / TX + seed, climb, TPX, TPY) * 0.62
+            + noise((drift / TX) * 2 + seed, climb * 2, TPX * 2, TPY * 2) * 0.38;
+
+  const cool = Math.exp(-row / 7);                // hottest at the bed
+  const churn = 0.4 + 1.3 * (tex - 0.42);         // centred, then stretched
+  const heat = tip * cool * churn * (0.72 + 0.5 * hN) * 1.5;
+  return fire(heat > 1 ? 1 : heat < 0 ? 0 : heat);
 }
 `;
 
@@ -1017,10 +1080,10 @@ export const EXAMPLES: Example[] = [
     source: aurora,
   },
   {
-    id: "ember",
-    name: "Ember",
-    blurb: "Fire sideways, on a hand-rolled black-body palette.",
-    source: ember,
+    id: "flames",
+    name: "Flames",
+    blurb: "Fire sideways: a jagged silhouette, soft tips, churn that climbs.",
+    source: flames,
   },
   {
     id: "interference",
