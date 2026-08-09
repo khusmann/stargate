@@ -41,11 +41,14 @@ is 192x24 by construction.
 
 It also fixes the failure the old pipeline actually had. Four PacMan frame directories
 were hand-rendered off one video and immediately lost track of: two are mislabeled (the
-dir named `10x` holds 4x frames, `3x` holds 10x), one has 936 frames where the others
-have 937, and every master is 191x47 where its target region (`Front (center)`, 96x24)
-wanted an exact multiple — 192x48. Nobody could say which directory was which, and the
-quality problem they chased with sharpness settings was an off-by-one. A script is
-reproducible by construction; a rendered folder is a claim you have to trust.
+dir named `10x` holds 4x frames, `3x` holds 10x), and one has 936 frames where the others
+have 937. Nobody could say which directory was which. The 191x47 master is itself correct
+— it is `Front (center)` in the map's half-pitch cells — but scaling in that space is
+`(n−1)k+1`, and each render multiplied by `m` instead, landing 1–9 px oversize and
+drifting up to half an LED by the far corner. That is the likely quality problem they
+chased with sharpness settings, and rendering above native at all made it worse. A script
+is reproducible by construction; a rendered folder is a claim you have to trust.
+(RESOURCES.md → *Half-pitch* has the arithmetic.)
 
 ### Client-side TypeScript
 
@@ -414,7 +417,9 @@ lose only the pre-filled settings.
 **2. Does `smooth 0` at native size pass pixels through 1:1?** In the one known-good case
 the LSM is doing a ~20x downscale internally — `PacMan.sho` points at 1910x470 frames with
 `smooth 1` against a 96x24 target region. Native-size passthrough has never been observed
-on this wall.
+on this wall. It is a safer bet than that sounds: the map is a half-pitch grid whose
+groups can be measured cell-wise or centre-wise, and 192x24 lands on every LED exactly
+under both, so no answer to the convention question dislodges native. Fallback is 383x47.
 
 ## Open questions
 

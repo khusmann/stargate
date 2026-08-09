@@ -46,9 +46,12 @@ The wall is **two long strips running along either side of the ceiling**, each
 
 The split is by **row band**, not column, and three independent facts confirm it:
 
-1. **The map encodes the boundary.** X pitch is a uniform 24 units across all 192
-   columns. Y pitch is 24 units for every row *except* between rows 11 and 12, which
-   is **36** — a deliberate marker at exactly the predicted seam.
+1. **The v2 map encoded the boundary.** In `Stargate v2.map` and `Stargate v2 - with
+   Rows.map`, Y pitch is 24 units for every row *except* between rows 11 and 12, which
+   is **120** — a deliberate marker at exactly the predicted seam. The canonical
+   `Stargate v3 - Pacman.map` **dropped it**: v3 is a uniform 24-unit lattice in both
+   axes, 192 x 24 with no seam. So this is corroboration from history, not from the map
+   in use; facts 2 and 3 are what hold it up today.
 2. **Controller quadrants** split 0–11 / 12–23 (table above).
 3. **Group names.** The map author labeled them: `Row R1`–`R12` are rows 0–11,
    `Row L1`–`L12` are rows 12–23. "Left/Right" is the ceiling side; "Front/Back" is
@@ -64,8 +67,52 @@ half.
 drawn across the full 24 rows is never seen as one image — a shape across rows 10–13 has
 its halves on opposite walls. A faithful preview draws the two bands well apart.
 
-Note the 36-unit gap is a *token* separator, not a measurement — 1.5x pixel pitch,
-where a real corridor is tens of pitches wide. It marks the seam; it does not size it.
+Note the v2 gap was a *token* separator, not a measurement — 5x pixel pitch, where a real
+corridor is tens of pitches wide. It marked the seam; it did not size it.
+
+### Half-pitch: the grid under the grid
+
+The map's base grid unit is **12**, not 24, and every pixel sits at an *odd* multiple of
+it. In `Stargate v3 - Pacman.map`, `x` runs 60, 84, … 4644 → `x/12` = 5, 7, … 387 (192
+odd values); `y` runs 84, 108, … 636 → `y/12` = 7, 9, … 53 (24 odd values). On the native
+grid the LEDs occupy odd cells with an empty cell between each. `Old/LightJoy.map` is laid
+out at pitch 12 directly, which is what makes 12 the real unit rather than an artifact.
+
+| Region | Pixels | Half-pitch cells |
+|---|---|---|
+| `All (front)` | 192 x 24 | 383 x 47 |
+| `Front (center)` | 96 x 24 | **191 x 47** |
+| One strip | 192 x 12 | 383 x 23 |
+
+**This explains the legacy art sizes, and they are not mistakes.** The PacMan master is
+191 x 47 — exactly `Front (center)`. `Warning Sign 24x24.png` is 26 x **23** — one strip
+tall. `Animation Template.png` is 765 x 93 = the full canvas at 4x, `(192−1)·4+1` by
+`(24−1)·4+1`; since Management Tool generates it, the vendor's own tooling works in this
+space.
+
+Consequences:
+
+- **Scaling in this space is `(n−1)k+1`, not `n·k`.** Multiplying the 191 x 47 master by
+  `m` gives 191m x 47m where the exact size is 190m+1 x 46m+1, so every PacMan render is
+  `m−1` px too large (table under `PacMan Animation/` below). The error is 0 at the
+  top-left and grows to `(m−1)/2m` ≈ **half an LED** at the bottom-right — a *sharpness
+  gradient* across the wall, worst on the 10x render. Testable against memory: was the
+  softness uneven end to end?
+- **Two conventions are possible and we do not yet know which the LSM uses.** *Cell* —
+  each pixel owns a 24-unit cell, group bbox 192 x 24 pixels. *Centre* — first pixel
+  centre to last, bbox 191 x 23 spans, which is what the half-pitch sizes assume.
+- **192 x 24 native is exact under both**, which is the practical takeaway. Cell is 1:1;
+  centre puts LED `i` at `i·191/191 = i`. Half-pitch sizes like 191 x 47 are exact under
+  centre only, and my earlier "should have been 192 x 48" is exact under cell only.
+  Native also makes `smooth` moot, since every sample lands on an integer.
+- **Rendering above native is the deeper error regardless of convention.** The LSM reduces
+  to the pixel count either way, so an upscale plus its downscale is two lossy resamples
+  where zero were needed. The `sharp`/`less sharp` variants were fighting a filter the
+  pipeline introduced itself.
+- **Aspect ratio is still an open risk.** `Front (center)` is 2280 x 552 raw units
+  (4.130:1), 191 x 47 half-cells (4.064:1), or 96 x 24 pixels (4.0:1). If the LSM
+  letterboxes instead of stretching to the bbox, exactness breaks at any source size —
+  the spike's corner-dot pattern is what catches this.
 
 ### The two runs are antiparallel
 
@@ -211,8 +258,10 @@ Two consequences:
 
 Note also that the doc tells authors to insert "the animation template you created with
 Management Tool" as a layer — so `Animation Template.png` (765 x 93) is a **Management Tool
-output**, not a chosen authoring size. The vendor's own template is not an exact multiple
-of 192 x 24, which may be where the off-by-one masters came from.
+output**, not a chosen authoring size. It is not a multiple of 192 x 24 because it is not
+in pixel space at all: 765 x 93 is `(192−1)·4+1` by `(24−1)·4+1`, the full canvas at 4x
+half-pitch. This is the vendor confirming the convention, and it is where the legacy
+master sizes came from.
 
 ---
 
@@ -250,22 +299,32 @@ at ~4x.
 variants numbered 1–8 (a brightness/blackbody progression; see
 `Chevrons - Blackbody Progression.psd`). All 24 px tall — full canvas height.
 
+The scroll effects are evidence that **`Image Scroll` works in pixel space, cell
+convention** — unlike the half-pitch animation masters. Each is `startx` 191 → `endx`
+−191 on a 192-px-wide canvas, with `starty`/`endy` 12 on a *12-row* group: the art is
+placed on the full 24-row canvas and the `gid` merely masks it to one strip. A half-pitch
+reading would need 383-wide travel and 23-tall art. Whether `Animation` shares that space
+is exactly gate 2.
+
 **`Shows/PacMan Animation/`** (735 MB — nearly the whole folder)
 - `Losing Match - PacMan.mp4`, `Winning Match - PacMan.mp4` — 173 MB each, raw source.
 - `Losing Match - PacMan - Edited.mp4` (11 MB), `PacMan - Losing Match edit 2.mp4`
-  (2.7 MB, 2280x552, 31 s).
+  (2.7 MB, 2280x552, 31 s) — 2280 x 552 is the `Front (center)` bounding box in *raw* map
+  units (95 x 23 pitches of 24), another sign the pipeline worked in map space.
 - `PacMan Video Edits.osp` + `_assets/` — OpenShot project, 30 fps, 1910x470.
 - Four rendered frame sequences of ~937 PNGs each:
 
-  | Directory | Frame size | Multiple of master |
-  |---|---|---|
-  | `rescaled 10x, sharp, sat` | 1910 x 470 | 10x |
-  | `rescaled 10x, sharp, less sat` | 764 x 188 | 4x |
-  | `rescaled 3x, less sharp, less sat` | 1910 x 470 | 10x |
-  | `rescaled 3x, sharp, sat` | 573 x 141 | 3x |
+  | Directory | Frame size | vs. master | Exact size | Off by |
+  |---|---|---|---|---|
+  | `rescaled 10x, sharp, sat` | 1910 x 470 | 10x | 1901 x 461 | 9 px |
+  | `rescaled 10x, sharp, less sat` | 764 x 188 | 4x | 761 x 185 | 3 px |
+  | `rescaled 3x, less sharp, less sat` | 1910 x 470 | 10x | 1901 x 461 | 9 px |
+  | `rescaled 3x, sharp, sat` | 573 x 141 | 3x | 571 x 139 | 2 px |
 
   The directory names do not match the actual sizes. All are upscales of a **191 x 47
-  master**.
+  master**, and the master itself is right — it is `Front (center)` in half-pitch cells.
+  The renders are not: scaling in that space is `(n−1)k+1`, so each is `m−1` px too large
+  and drifts up to half an LED by the far corner. See *Half-pitch* above.
 
   **The master is 96 x 24 at 2x, not the full canvas.** `PacMan.sho` targets
   `gid` 2410 = `Front (center)` = rows 0–23, cols 0–95 — the front *half* of the
@@ -332,6 +391,11 @@ testing, but it is no longer load-bearing.
 known-good case the LSM is doing a **~20x downscale** internally — `PacMan.sho` points at
 1910 x 470 frames with `smooth` 1 against a 96 x 24 target region. Native-resolution
 passthrough has never been observed here. Confirm it.
+
+*Lower stakes than it looks.* 192 x 24 is exact under both the cell and centre
+conventions (see *Half-pitch* above), and `Image Scroll` already demonstrably works in
+pixel space, so native is the right bet even unconfirmed. What the spike's stripe patterns
+settle is whether `Animation` agrees; if it does not, the fallback is 383 x 47.
 
 **3. Absolute strip orientation.** *Partly resolved* — the two runs are antiparallel
 (above). What remains is absolute: which physical wall is the Right strip, and which end
