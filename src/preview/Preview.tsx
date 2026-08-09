@@ -208,9 +208,6 @@ export function Preview({ player }: PreviewProps): React.ReactElement {
   }, [contentWidth, zoom]);
 
   const stripStyle = { width: `${contentWidth}px`, height: `${BAND_HEIGHT * zoom}px` };
-  /** Where the strip actually starts: centred when it fits, hard left when it
-   *  is scrolling. The wall tags follow it rather than the frame. */
-  const stripLeft = Math.max(0, (viewWidth - contentWidth) / 2);
 
   return (
     <section className="preview" ref={section}>
@@ -294,16 +291,14 @@ export function Preview({ player }: PreviewProps): React.ReactElement {
           {/* Pinned to the frame rather than the scrolling content, and sitting
               inside the corridor gap — anywhere else covers a strip at 1x. */}
           <div className="stage-labels" aria-hidden="true">
-            <span
-              className="wall-tag"
-              style={{ top: BAND_HEIGHT * zoom + 5, left: stripLeft }}
-            >
+            {/* Left-aligned, full stop. The frame shrink-wraps the strips, so
+                the stage starts exactly where the strips do at every zoom —
+                offsetting these to a computed centre put them adrift by half
+                the spare width, which on a phone at 1x is most of the screen. */}
+            <span className="wall-tag" style={{ top: BAND_HEIGHT * zoom + 5 }}>
               Right wall · rows 0–11
             </span>
-            <span
-              className="wall-tag"
-              style={{ top: BAND_HEIGHT * zoom + GAP - 20, left: stripLeft }}
-            >
+            <span className="wall-tag" style={{ top: BAND_HEIGHT * zoom + GAP - 20 }}>
               Left wall · rows 12–23
             </span>
           </div>

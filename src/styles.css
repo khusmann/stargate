@@ -458,8 +458,11 @@ button[aria-pressed="true"] {
   outline-offset: 2px;
 }
 
+/* No centring here: the frame hugs the strips, so this is already the full
+   width of its container. Centring inside it would put the content somewhere
+   the absolutely-positioned wall tags cannot follow. */
 .pan {
-  margin: 0 auto;
+  margin: 0;
 }
 
 .strip {
