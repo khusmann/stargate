@@ -28,12 +28,15 @@ Derived by parsing `Shows/Stargate v3 - Pacman.map`:
 
 Each controller drives exactly one quadrant (1,152 px = 12 rows x 96 cols):
 
-| Serial | IP | Rows | Cols |
-|---|---|---|---|
-| `CTRL-A` | [redacted] | 0–11 | 0–95 |
-| `CTRL-B` | [redacted] | 0–11 | 96–191 |
-| `CTRL-C` | [redacted] | 12–23 | 0–95 |
-| `CTRL-D` | [redacted] | 12–23 | 96–191 |
+| Controller | Rows | Cols |
+|---|---|---|
+| `CTRL-A` | 0–11 | 0–95 |
+| `CTRL-B` | 0–11 | 96–191 |
+| `CTRL-C` | 12–23 | 0–95 |
+| `CTRL-D` | 12–23 | 96–191 |
+
+Real serials and IP addresses are deliberately not recorded in this repository. They
+are in the `.map` file under `resources/` (untracked) if you need them.
 
 ### Physical layout: two ceiling strips
 

@@ -38,8 +38,8 @@ format. Hand-edit one value in `PacMan.sho`, load it, see if the change takes.
 
 ## Tooling
 
-A **single-page web app** — client-side TypeScript, bundled by one `esbuild` command into
-one HTML file. No server, no binary, no install: a hosted URL, or a file you open.
+A **single-page web app** — client-side TypeScript, built with Vite into a static site plus
+a single self-contained HTML file. No server, no binary, no install: a hosted URL, or a file you open.
 
 A browser beats an `.exe` on "nothing to install" (every Windows box has Edge, and a URL
 doesn't have to get past SmartScreen), it already has Canvas and a PNG encoder so most of
@@ -106,8 +106,8 @@ The 192 x 24 canvas stacks them. Verified against the map:
 
 | Strip | Rows | Controllers |
 |---|---|---|
-| Right | 0–11 | `CTRL-A` (.123, cols 0–95) + `CTRL-B` (.135, cols 96–191) |
-| Left | 12–23 | `CTRL-C` (.117, cols 0–95) + `CTRL-D` (.81, cols 96–191) |
+| Right | 0–11 | `CTRL-A` (cols 0–95) + `CTRL-B` (cols 96–191) |
+| Left | 12–23 | `CTRL-C` (cols 0–95) + `CTRL-D` (cols 96–191) |
 
 Each port drives one 6 x 12 cross-section, so port boundaries run crosswise.
 
