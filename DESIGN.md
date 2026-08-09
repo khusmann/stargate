@@ -307,20 +307,24 @@ Output is a `.sho` plus a directory of PNG frames.
   that can be silently wrong. It is a property of the LSC machine, not of a show, so it is
   configured once and kept in `localStorage`.
 
-  Four things make that survivable, in order of how much they help:
+  **Don't try to predict where the download lands.** The frames are expensive to produce
+  and path-independent; the `.sho` is 3 KB and is the *only* path-dependent artifact. So
+  decouple them:
 
-  1. **Prefill the known root.** Every existing show lives under `G:/My Drive/Fuse Live
-     Arts/Artwork/Stargate/Shows/`. Default to it and append the show name, so the zip
-     extracts to `My Show/` there and the common case needs no configuration at all.
-  2. **Read it from an existing `.sho`.** Dragging in `PacMan.sho` and parsing its
+  1. **The `.sho` is separately and repeatedly downloadable**, with an editable path
+     field next to the button. Extract the zip wherever you like, see where it actually
+     landed, type that, click. Fixing a wrong path costs one click instead of re-rendering
+     540 frames. This is the main mechanism; everything below is convenience on top of it.
+  2. **Prefill the known root.** Every existing show lives under `G:/My Drive/Fuse Live
+     Arts/Artwork/Stargate/Shows/`, so default to it and append the show name. Right most
+     of the time, and never load-bearing.
+  3. **Read it from an existing `.sho`.** Dragging in `PacMan.sho` and parsing its
      `<animationdir>` is ~20 lines and takes the value from ground truth on the user's own
      machine. "Drop in a show that already works" is answerable by someone who could not
      answer "type your asset root".
-  3. **Print the expected path** in the export dialog and in a README inside the zip.
-     Verification is impossible, so the requirement has to be unmissable at the moment
-     they extract.
   4. **Document the symptom.** A wrong path almost certainly plays black rather than
-     erroring usefully.
+     erroring usefully — and the fix is either one click above, or editing one line of
+     XML in Notepad, which handles UTF-16LE fine.
 
 Fixed by the animation contract, not configurable: `gid` 4999 (`All (front)`), `scale` 1,
 `smooth` 0, `preload` 0, `xoffset`/`yoffset` 0, `transenabled` 0. `end` is derived —
