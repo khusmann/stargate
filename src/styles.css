@@ -123,6 +123,58 @@ button[aria-pressed="true"] {
   }
 }
 
+/* Narrow enough that three actions, a picker and a title cannot share a line.
+   Stack them instead of letting the grid crush every column. */
+@media (max-width: 760px) {
+  .topbar {
+    grid-template-columns: 1fr;
+    row-gap: 8px;
+  }
+
+  .topbar-centre {
+    justify-content: stretch;
+  }
+
+  .topbar-centre .menu {
+    width: 100%;
+  }
+
+  .menu-button {
+    width: 100%;
+  }
+
+  .menu-panel {
+    left: 0;
+    transform: none;
+    width: min(372px, calc(100vw - 28px));
+  }
+
+  .topbar-right {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .status {
+    flex-basis: 100%;
+  }
+
+  /* The scrubber needs the full width to be usable with a thumb; the buttons
+     sit above it. */
+  .transport {
+    flex-wrap: wrap;
+  }
+
+  .scrub {
+    order: 1;
+    flex-basis: 100%;
+    min-width: 0;
+  }
+
+  .counter {
+    min-width: 0;
+  }
+}
+
 /* --- example menu ---------------------------------------------------- */
 
 .menu {
@@ -268,7 +320,9 @@ button[aria-pressed="true"] {
 .preview-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 10px 12px;
+  /* Two control groups and eight buttons do not fit a phone on one line. */
+  flex-wrap: wrap;
   margin-bottom: 10px;
 }
 

@@ -105,7 +105,9 @@ export function Preview({ player }: PreviewProps): React.ReactElement {
   const drag = useRef<{ pointer: number; x: number; scroll: number } | null>(null);
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
     const el = scroller.current;
-    if (event.button !== 0 || !el || !scrolls) return;
+    // Mouse only. A touch drag is already scrolling the container natively, and
+    // moving scrollLeft underneath it makes the strip travel at double speed.
+    if (event.pointerType !== "mouse" || event.button !== 0 || !el || !scrolls) return;
     drag.current = { pointer: event.pointerId, x: event.clientX, scroll: el.scrollLeft };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
