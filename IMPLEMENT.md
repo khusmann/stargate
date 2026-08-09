@@ -29,13 +29,15 @@ A single-page web app for authoring shows on a 192 x 24 LED installation. A show
 
 ## Stack
 
-- **TypeScript**, bundled by **esbuild** into a single self-contained HTML file. One command, no dev-server framework.
-- **React** for the UI chrome. esbuild handles JSX with no extra configuration, and ~45 KB gzipped is minor next to CodeMirror. There is more interrelated state here than it first appears — current frame, playing, zoom, pan offset, error, export progress, selected example, and an overview rectangle that tracks pan — and it is well-represented in training data, which matters on a project where much of the code will be AI-written.
+- **TypeScript**, built with **Vite**. Two reasons over raw esbuild: HTML is a first-class entry point, so `vite-plugin-singlefile` gives the self-contained build below without hand-rolled glue; and React Fast Refresh makes the edit loop tolerable. Vite uses esbuild for transforms internally, so nothing is lost on speed.
+- **React** for the UI chrome. ~45 KB gzipped is minor next to CodeMirror. There is more interrelated state here than it first appears — current frame, playing, zoom, pan offset, error, export progress, selected example, and an overview rectangle that tracks pan — and it is well-represented in training data, which matters on a project where much of the code will be AI-written.
 - **CodeMirror 6** (`@codemirror/lang-javascript` + basic setup) for the editor. Mount it on a ref in an effect; do not add a React wrapper library.
 - **fflate** for the zip.
 - Deploys to **GitHub Pages**. `npm run build` must produce something Pages can serve statically.
 
-Keep the dependency list to those four. Anything else, ask first.
+Two build outputs, from the same source: the normal Pages build, and a **single self-contained HTML file** (`vite-plugin-singlefile`) that works opened directly from disk. The second is the offline path if the LSC machine turns out to have no internet. Note the plugin needs code-splitting disabled and a high `assetsInlineLimit`.
+
+Keep the dependency list to Vite, React, CodeMirror, fflate, and the singlefile plugin. Anything else, ask first.
 
 ### The render loop does not go through React
 
@@ -101,7 +103,83 @@ The two ceiling runs are wired **antiparallel** — column order is reversed on 
 
 - Current script in `localStorage`, restored on load.
 - Script compressed into the URL fragment, so a link is a runnable show. Reading a fragment overrides localStorage.
-- Three or four **bundled examples** as a starting gallery. Make at least one a good `pixel` demo (a plasma or a travelling wave) and one a `draw` demo. They double as the smoke test.
+- **Bundled examples** — see the next section.
+
+## Bundled examples
+
+Ship these four. They are the first thing anyone sees, they set the bar for what the tool is *for*, and they double as the smoke test. Use them as written or improve them — but keep the spread: two pure `pixel` demos, one `draw` demo, and one that teaches the two-wall split.
+
+Everything here is tuned for a 16:1 strip. Radial and symmetric effects mostly die at this aspect ratio; motion along the 192 axis is what reads.
+
+**1. Plasma** — the `pixel` hello-world. Shows the colour range immediately.
+
+```js
+export const name = "Plasma", fps = 30, seconds = 12;
+
+export function pixel(x, y, t) {
+  const v = Math.sin(x * 0.06 + t)
+          + Math.sin(y * 0.30 - t * 1.3)
+          + Math.sin((x + y) * 0.05 + t * 0.7);
+  const n = (v + 3) / 6;                        // 0..1
+  return hsl(n * 300 + t * 20, 0.9, 0.12 + n * 0.42);
+}
+```
+
+Note the lightness varies with `n` rather than sitting at a constant `0.5`. Fixing lightness makes every pixel equally bright and only the hue move, which looks flat and runs the whole wall at full power. Vary brightness, not just colour — it is the difference between a plasma and a hue wash.
+
+**2. Warp** — chevrons streaking down the corridor. Thematically the point of the installation, and it shows how much a sharp leading edge plus a long tail reads at this size.
+
+```js
+export const name = "Warp", fps = 30, seconds = 10;
+
+export function pixel(x, y, t) {
+  const d = (x - t * 90 + 1920) % 24;               // repeats every 24 px
+  const head = Math.max(0, 1 - d / 2);              // bright leading edge
+  const tail = Math.max(0, 1 - d / 18) * 0.5;       // long fading tail
+  const v = Math.min(1, head + tail);
+  const centre = 1 - Math.abs((y % 12) - 5.5) / 7;  // brighter mid-strip
+  return hsl(195, 0.9, v * centre * 0.6);
+}
+```
+
+**3. Starfield** — the `draw` demo. Discrete, hard-edged, stateful: exactly what a shader is bad at. Note the per-star allocation is fine at 60 objects per frame; the rule is only about per-*pixel* allocation.
+
+```js
+export const name = "Starfield", fps = 30, seconds = 20;
+
+const stars = Array.from({ length: 60 }, () => ({
+  y: Math.floor(Math.random() * 24),
+  speed: 20 + Math.random() * 90,
+  len: 2 + Math.floor(Math.random() * 6),
+  offset: Math.random() * 192,
+}));
+
+export function draw(ctx, t) {
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, 192, 24);
+  for (const s of stars) {
+    const x = (s.offset + t * s.speed) % 210 - 10;
+    ctx.fillStyle = `rgba(255,255,255,${(0.35 + 0.65 * s.speed / 110).toFixed(2)})`;
+    ctx.fillRect(x, s.y, s.len, 1);
+  }
+}
+```
+
+**4. Twin** — the teaching example. The two strips face each other across the room, so this makes them deliberately different: opposite colours, opposite directions. Demonstrates the `y < 12` and `y % 12` idioms in four lines.
+
+```js
+export const name = "Twin", fps = 30, seconds = 14;
+
+export function pixel(x, y, t) {
+  const wall = y < 12 ? 0 : 1;     // opposite sides of the corridor
+  const row  = y % 12;             // position across the strip
+  const dir  = wall ? -1 : 1;      // travelling opposite ways
+  const v = Math.sin(x * 0.08 + dir * t * 2 + row * 0.15);
+  return hsl(wall ? 20 : 200, 0.9, Math.max(0, v) ** 2 * 0.55);
+}
+```
+
+Default to **Plasma** on first load.
 
 ## The AI prompt button
 
