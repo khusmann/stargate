@@ -11,7 +11,7 @@ import { DEFAULT_EXAMPLE, type Example } from "./examples";
 import { ExampleMenu } from "./examples/ExampleMenu";
 import {
   clearFragment,
-  incomingScript,
+  incomingShow,
   initialState,
   save,
   shareUrl,
@@ -120,10 +120,10 @@ export function App(): React.ReactElement {
   // same consent gate as one that was followed cold.
   useEffect(() => {
     const onHashChange = (): void => {
-      const shared = incomingScript();
+      const shared = incomingShow();
       if (shared === null) return;
-      setSource(shared);
-      setPendingLink(true);
+      setSource(shared.source);
+      setPendingLink(shared.fromLink);
     };
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);

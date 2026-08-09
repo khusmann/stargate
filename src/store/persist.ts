@@ -3,9 +3,13 @@
  *  a runnable show. No accounts, no server, nothing uploaded. */
 
 import { deflateSync, inflateSync, strFromU8, strToU8 } from "fflate";
+import { EXAMPLES } from "../examples";
 
 const STORAGE_KEY = "stargate:script";
+/** A whole show, compressed into the URL. */
 const FRAGMENT_KEY = "s";
+/** Just the id of a bundled example. */
+const EXAMPLE_KEY = "e";
 
 function toBase64Url(bytes: Uint8Array): string {
   let binary = "";
@@ -36,10 +40,41 @@ export function decodeScript(encoded: string): string | null {
   }
 }
 
-export function scriptFromFragment(hash: string = location.hash): string | null {
+export interface LoadedShow {
+  source: string;
+  /**
+   * True when the code itself came out of the URL, and so from whoever sent it.
+   * A `#e=` link carries only the id of a show already in this bundle, which is
+   * code we shipped — there is nothing for a stranger to smuggle in, so it does
+   * not need approving and it fits in a tweet.
+   */
+  fromLink: boolean;
+}
+
+function readHash(hash: string = location.hash): LoadedShow | null {
   const params = new URLSearchParams(hash.replace(/^#/, ""));
+
+  const id = params.get(EXAMPLE_KEY);
+  if (id !== null) {
+    const example = EXAMPLES.find((candidate) => candidate.id === id);
+    // An unknown id is a stale link, not an attack: open normally.
+    return example ? { source: example.source, fromLink: false } : null;
+  }
+
   const encoded = params.get(FRAGMENT_KEY);
-  return encoded ? decodeScript(encoded) : null;
+  if (encoded === null) return null;
+  const decoded = decodeScript(encoded);
+  return decoded === null ? null : { source: decoded, fromLink: true };
+}
+
+/** The fragment for a show: its example id when it is one untouched, and the
+ *  whole compressed script when it is not. */
+export function shareFragment(source: string): string {
+  const params = new URLSearchParams();
+  const example = EXAMPLES.find((candidate) => candidate.source === source);
+  if (example) params.set(EXAMPLE_KEY, example.id);
+  else params.set(FRAGMENT_KEY, encodeScript(source));
+  return `#${params}`;
 }
 
 /** The last fragment this app wrote, so an incoming one can be told apart from
@@ -48,9 +83,7 @@ let lastWritten: string | null = null;
 
 /** Rewrite the fragment in place — never a history entry per keystroke. */
 export function writeFragment(source: string): void {
-  const params = new URLSearchParams();
-  params.set(FRAGMENT_KEY, encodeScript(source));
-  lastWritten = `#${params}`;
+  lastWritten = shareFragment(source);
   history.replaceState(null, "", `${location.pathname}${location.search}${lastWritten}`);
 }
 
@@ -60,15 +93,13 @@ export function writeFragment(source: string): void {
  * a same-document navigation, so nothing reloads and the app has to notice for
  * itself. Returns null for the echo of our own autosave.
  */
-export function incomingScript(): string | null {
+export function incomingShow(): LoadedShow | null {
   if (location.hash === lastWritten) return null;
-  return scriptFromFragment();
+  return readHash();
 }
 
 export function shareUrl(source: string): string {
-  const params = new URLSearchParams();
-  params.set(FRAGMENT_KEY, encodeScript(source));
-  return `${location.origin}${location.pathname}${location.search}#${params}`;
+  return `${location.origin}${location.pathname}${location.search}${shareFragment(source)}`;
 }
 
 export function loadSaved(): string | null {
@@ -100,30 +131,16 @@ export function clearFragment(): void {
   history.replaceState(null, "", `${location.pathname}${location.search}`);
 }
 
-export interface InitialState {
-  source: string;
-  /**
-   * True when the source arrived in a link. A link is the one way somebody
-   * else's code reaches this app, and a show is arbitrary JavaScript running in
-   * this origin — so it is loaded into the editor to be read, and not run until
-   * the person looking at it says so. Everything else here is code you typed or
-   * pasted deliberately.
-   */
-  fromLink: boolean;
-}
-
 /** The escape hatch. A show with an endless loop in `pixel` freezes the tab,
  *  and because the script is restored from storage, reopening freezes it again
  *  — so there has to be a URL that starts clean without running anything. */
 const RESET_HASHES = new Set(["#new", "#reset"]);
 
-export function initialState(fallback: string): InitialState {
+export function initialState(fallback: string): LoadedShow {
   if (RESET_HASHES.has(location.hash)) {
     clearSaved();
     clearFragment();
     return { source: fallback, fromLink: false };
   }
-  const shared = scriptFromFragment();
-  if (shared !== null) return { source: shared, fromLink: true };
-  return { source: loadSaved() ?? fallback, fromLink: false };
+  return readHash() ?? { source: loadSaved() ?? fallback, fromLink: false };
 }
