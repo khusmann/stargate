@@ -33,11 +33,22 @@ A single-page web app for authoring shows on a 192 x 24 LED installation. A show
 - **React** for the UI chrome. ~45 KB gzipped is minor next to CodeMirror. There is more interrelated state here than it first appears — current frame, playing, zoom, pan offset, error, export progress, selected example, and an overview rectangle that tracks pan — and it is well-represented in training data, which matters on a project where much of the code will be AI-written.
 - **CodeMirror 6** (`@codemirror/lang-javascript` + basic setup) for the editor. Mount it on a ref in an effect; do not add a React wrapper library.
 - **fflate** for the zip.
+- **`vite-plugin-checker`** so type errors appear in the dev overlay as you work, not only in CI.
+
+### Typechecking
+
+No fast bundler typechecks. Vite, esbuild, Parcel, and Bun all transpile TypeScript by *stripping* types — that is precisely why they are fast. Switching bundlers does not get you typechecking; only running the real compiler does. So:
+
+- `npm run typecheck` → `tsc --noEmit`, wired into CI (see *Deployment*).
+- `vite-plugin-checker` runs `tsc` in a worker during `npm run dev` and surfaces errors in the browser overlay, which is what makes typechecking feel present rather than ceremonial.
+- `strict: true` in `tsconfig.json`.
+
+That combination gives stricter checking than a bundler-integrated setup would, because `tsc` is the actual authority rather than a plugin's approximation of it.
 - Deploys to **GitHub Pages**.
 
 Two build outputs from the same source: `npm run build` for Pages, and `npm run build:single` for a **single self-contained HTML file** (`vite-plugin-singlefile`) that works opened directly from disk. The second is the offline path if the LSC machine turns out to have no internet. Note the plugin needs code-splitting disabled and a high `assetsInlineLimit`.
 
-Keep the dependency list to Vite, React, CodeMirror, fflate, and the singlefile plugin. Anything else, ask first.
+Keep the dependency list to Vite, React, CodeMirror, fflate, and the singlefile and checker plugins. Anything else, ask first.
 
 ### The render loop does not go through React
 
@@ -211,7 +222,7 @@ Add `.github/workflows/deploy.yml` — build on push and publish to Pages. Rough
 ```yaml
 name: Deploy
 on:
-  push: { branches: [master] }     # note: master, not main
+  push: { branches: [main] }
   workflow_dispatch:
 
 permissions: { contents: read, pages: write, id-token: write }
@@ -245,10 +256,9 @@ jobs:
 
 Four things that bite here:
 
-- **Vite does not typecheck.** `vite build` strips types with esbuild and will happily ship broken TypeScript. Add a `typecheck` script running `tsc --noEmit` and run it in CI, or type errors are decorative.
 - **Set `base` in `vite.config.ts`.** A project Pages site is served from `/<repo>/`, so the default base of `/` makes every asset 404. This is the single most common Pages failure.
 - **Publish the offline build alongside the site** (the `cp` step above) and link to it from the app, so the self-contained file has a distribution path without a separate release process.
-- **Branch is `master`** in this repo, not `main`.
+- **Typechecking is a separate step** — see below. It must run in CI or it effectively does not run.
 
 Manual, one-time, and not yours to do — flag them for the repo owner rather than trying:
 
@@ -274,5 +284,5 @@ Manual, one-time, and not yours to do — flag them for the repo owner rather th
 - Editing the script updates the preview without a reload; a syntax error shows an inline marker and keeps the last good frame.
 - Zoom, pan, overview, and transport all behave as specified.
 - Export produces a zip whose frames decode as 192 x 24 PNGs. Include a check — even a script that renders a known pattern and asserts a few pixel values — so this is verified rather than assumed.
-- `npm run typecheck` passes, and CI runs it — Vite alone will not catch type errors.
+- `npm run typecheck` passes under `strict: true`, CI runs it, and type errors surface in the dev overlay.
 - README covers `npm run dev`, `npm run build`, `npm run build:single`, and the one-time Pages setup.
