@@ -304,16 +304,17 @@ button[aria-pressed="true"] {
   display: none;
 }
 
+/* Full-bleed and flush above the topbar: it is page chrome, not a card in the
+   content column, so it gets no side margin and no radius — only the bottom
+   edge, which reads as the top of the header stack. */
 @media (max-width: 760px) and (orientation: portrait) {
   .rotate-hint {
     display: flex;
     align-items: center;
     gap: 10px;
     flex: none;
-    margin: 10px 14px 0;
-    padding: 10px 12px;
-    border: 1px solid #8a6a12;
-    border-radius: 8px;
+    padding: 8px 14px;
+    border-bottom: 1px solid #8a6a12;
     background: #2a2107;
     color: #ffd76a;
     font-size: 13.5px;

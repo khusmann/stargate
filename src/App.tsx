@@ -177,6 +177,24 @@ export function App(): React.ReactElement {
 
   return (
     <div className="app">
+      {/* Only rendered at all in narrow portrait — see the media query. Nothing
+          here fits an upright phone: the wall is 16:1, code lines wrap, and the
+          header stacks three deep. So it sits above the header as a bar about
+          the whole page, not a note attached to any one pane. Rotating hides it
+          without needing to dismiss it. */}
+      {rotateHint && (
+        <div className="rotate-hint">
+          <span>Turn your phone sideways — this page needs the width.</span>
+          <button
+            type="button"
+            aria-label="Dismiss"
+            onClick={() => setRotateHint(false)}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       <header className="topbar">
         <div className="topbar-left">
           <h1>Stargate</h1>
@@ -236,22 +254,6 @@ export function App(): React.ReactElement {
       {status && (
         <div className="status" role="status">
           {status}
-        </div>
-      )}
-
-      {/* Only rendered at all in narrow portrait — see the media query. The
-          wall is 16:1, so a phone held upright shows about half of it even at
-          the lowest zoom. Rotating hides this without needing to dismiss it. */}
-      {rotateHint && (
-        <div className="rotate-hint">
-          <span>The wall is long. Turn your phone sideways for a better view.</span>
-          <button
-            type="button"
-            aria-label="Dismiss"
-            onClick={() => setRotateHint(false)}
-          >
-            ✕
-          </button>
         </div>
       )}
 
