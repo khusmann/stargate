@@ -3,7 +3,7 @@
 // Rows 0-11 are one wall, rows 12-23 the other. Nobody ever sees a shape
 // spanning all 24 rows as one image.
 
-/** Shown in the UI and used as the export filename. */
+/** The show's title, used as the export filename. Optional — defaults to "Untitled". */
 export const name: string;
 
 /** Frames per second. 30 unless you have a reason. */
