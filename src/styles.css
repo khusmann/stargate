@@ -124,40 +124,46 @@ button[aria-pressed="true"] {
 }
 
 /* Narrow enough that three actions, a picker and a title cannot share a line.
-   Stack them instead of letting the grid crush every column. */
+   The title and the example picker keep sharing the top row — they're short
+   and belong together as "what am I looking at" — and only the action
+   buttons drop to a row of their own. */
 @media (max-width: 760px) {
   .topbar {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "left centre"
+      "right right";
     row-gap: 8px;
   }
 
+  .topbar-left {
+    grid-area: left;
+  }
+
   .topbar-centre {
-    justify-content: stretch;
-  }
-
-  .topbar-centre .menu {
-    width: 100%;
-  }
-
-  .menu-button {
-    width: 100%;
+    grid-area: centre;
+    justify-content: flex-end;
   }
 
   .menu-panel {
-    left: 0;
+    left: auto;
+    right: 0;
     transform: none;
     width: min(372px, calc(100vw - 28px));
   }
 
   .topbar-right {
+    grid-area: right;
     flex-wrap: wrap;
     justify-content: flex-start;
   }
 
   /* The scrubber needs the full width to be usable with a thumb; the buttons
-     sit above it. */
+     sit above it, centred as a group rather than pinned to the left edge —
+     otherwise the button row reads off-balance under the centred preview. */
   .transport {
     flex-wrap: wrap;
+    justify-content: center;
   }
 
   .scrub {
@@ -167,6 +173,7 @@ button[aria-pressed="true"] {
   }
 
   .counter {
+    order: 2;
     min-width: 0;
   }
 }
