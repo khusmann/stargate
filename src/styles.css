@@ -311,12 +311,13 @@ button[aria-pressed="true"] {
     gap: 10px;
     flex: none;
     margin: 10px 14px 0;
-    padding: 8px 10px;
-    border: 1px solid #2a3a52;
+    padding: 10px 12px;
+    border: 1px solid #8a6a12;
     border-radius: 8px;
-    background: #121a26;
-    color: #9dc0ff;
-    font-size: 12.5px;
+    background: #2a2107;
+    color: #ffd76a;
+    font-size: 13.5px;
+    font-weight: 600;
     line-height: 1.4;
   }
 
@@ -324,10 +325,10 @@ button[aria-pressed="true"] {
     margin-left: auto;
     flex: none;
     padding: 2px 8px;
-    font-size: 12px;
+    font-size: 13px;
     background: transparent;
-    border-color: #2a3a52;
-    color: #9dc0ff;
+    border-color: #6b5410;
+    color: #ffd76a;
   }
 }
 
@@ -397,12 +398,21 @@ button[aria-pressed="true"] {
   font-size: 12px;
 }
 
-/* The frame holds the scrollbar, the row gutter, and the scroller. */
+/* The frame holds the scroller and the ruler.
+   It shrink-wraps the strips. Zoom is a whole number of screen pixels per wall
+   pixel, so what fits is 192 x N and the leftover is whatever the window has
+   spare — up to 191 px. Inside a full-width box that leftover reads as wasted
+   space; with the box hugging the strips it reads as page margin, which is what
+   it is. When the strips are wider than the window, max-width takes over and
+   the scroller does its job. */
 .stage-frame {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
   background: #000;
   border: 1px solid #23262d;
   border-radius: 8px;
-  padding: 10px 14px 14px;
+  padding: 10px 12px 12px;
 }
 
 .stage-row {

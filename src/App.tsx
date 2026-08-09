@@ -244,10 +244,7 @@ export function App(): React.ReactElement {
           the lowest zoom. Rotating hides this without needing to dismiss it. */}
       {rotateHint && (
         <div className="rotate-hint">
-          <span>
-            The wall is 16:1 — turn your phone sideways to see all 192 columns at
-            once.
-          </span>
+          <span>The wall is long. Turn your phone sideways for a better view.</span>
           <button
             type="button"
             aria-label="Dismiss"

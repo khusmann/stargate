@@ -8,8 +8,8 @@
  *  Panning is a plain scroll container. It brings the wheel, the trackpad, the
  *  keyboard, and a position indicator with it, all of which would otherwise be
  *  hand-written — and its scrollbar takes space only when there is something to
- *  scroll: below about 1,550 px of window at 8x, and always at 10x, where the
- *  canvas is 1,920 px wide.
+ *  scroll, which at `fit` is never: fit is by definition the largest zoom that
+ *  does fit. It appears when you pick a zoom above that.
  *
  *  No minimap. One would earn its place if the viewport showed a small fraction
  *  of the wall, but it barely does: at 8x in a 900 px window you can still see
@@ -55,16 +55,24 @@ const RULER_HEIGHT = 20;
 /** The controller seam — CTRL-A/B and CTRL-C/D meet here. */
 const SEAM_COLUMN = 96;
 
+/** Horizontal chrome the frame adds around the strips: padding both sides plus
+ *  its border. Zoom is measured against the *available* width, not the frame's
+ *  own width — the frame shrink-wraps its content, so measuring it would be
+ *  circular and collapses to 1x. */
+const FRAME_CHROME = 12 * 2 + 1 * 2;
+
 interface PreviewProps {
   player: Player;
 }
 
 export function Preview({ player }: PreviewProps): React.ReactElement {
+  const section = useRef<HTMLElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const right = useRef<HTMLCanvasElement>(null);
   const left = useRef<HTMLCanvasElement>(null);
   const ruler = useRef<HTMLCanvasElement>(null);
 
+  /** Width the strips may occupy: the section, less the frame's own chrome. */
   const [viewWidth, setViewWidth] = useState(0);
   const [zoomChoice, setZoomChoice] = useState<number | "fit">("fit");
   // LEDs by default: it is what the room looks like, and the flat view is the
@@ -92,13 +100,15 @@ export function Preview({ player }: PreviewProps): React.ReactElement {
   }, [player, pixelStyle, zoom, ledsReadable]);
 
   useLayoutEffect(() => {
-    const el = scroller.current;
+    const el = section.current;
     if (!el) return;
+    const measure = (width: number): void =>
+      setViewWidth(Math.max(WIDTH, width - FRAME_CHROME));
     const observer = new ResizeObserver(([entry]) => {
-      if (entry) setViewWidth(entry.contentRect.width);
+      if (entry) measure(entry.contentRect.width);
     });
     observer.observe(el);
-    setViewWidth(el.clientWidth);
+    measure(el.clientWidth);
     return () => observer.disconnect();
   }, []);
 
@@ -203,7 +213,7 @@ export function Preview({ player }: PreviewProps): React.ReactElement {
   const stripLeft = Math.max(0, (viewWidth - contentWidth) / 2);
 
   return (
-    <section className="preview">
+    <section className="preview" ref={section}>
       <div className="preview-bar">
         <span className="preview-label">Preview</span>
         <div className="zoom">
