@@ -120,6 +120,18 @@ def p9_ramp():
     return im
 
 
+NOTES = {
+    "black":     "nothing lit?",
+    "all dim":   "does everything light up — both strips, full length?",
+    "ends":      "which end of the corridor is white?",
+    "walls":     "which side of the room is green?",
+    "v-stripes": "crisp stripes, or flat grey?",
+    "h-stripes": "crisp stripes, or flat grey?",
+    "checker":   "the harshest resampling test",
+    "corners":   "all five dots visible, exactly at the corners?",
+    "ramp":      "8 distinct steps, or do the bright ones merge?",
+}
+
 PATTERNS = [
     ("black",     p1_black),
     ("all dim",   p2_all_dim),
@@ -202,6 +214,82 @@ def sho(smooth: int, total_ms: int, animdir: str = ANIMDIR) -> bytes:
 
 # --- main -----------------------------------------------------------------
 
+PREVIEW_CSS = """
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 32px 24px 64px; background: #0b0c0e; color: #d7dae0;
+       font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif; }
+h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; color: #f0f2f5; }
+.sub { color: #7d838f; margin: 0 0 28px; }
+.bar { position: sticky; top: 0; z-index: 5; display: flex; gap: 8px; align-items: center;
+       padding: 12px 0 16px; margin-bottom: 8px; background: #0b0c0e;
+       border-bottom: 1px solid #1e2127; }
+button { font: inherit; color: #d7dae0; background: #1a1d23; border: 1px solid #2a2f38;
+         border-radius: 6px; padding: 5px 11px; cursor: pointer; }
+button:hover { background: #232830; }
+button[aria-pressed="true"] { background: #2f5fd0; border-color: #3f6fe0; color: #fff; }
+.bar span { color: #7d838f; margin-right: 4px; }
+.pat { margin: 26px 0 0; }
+.hd { display: flex; gap: 10px; align-items: baseline; margin-bottom: 8px; }
+.nm { font-weight: 600; color: #f0f2f5; }
+.tm { color: #6e737d; font-variant-numeric: tabular-nums; }
+.q  { color: #8b919c; font-style: italic; }
+.wall { display: inline-block; padding: 14px; background: #000;
+        border: 1px solid #23262d; border-radius: 8px; overflow-x: auto; max-width: 100%; }
+.strip { image-rendering: pixelated; background-repeat: no-repeat; }
+.gap { height: 34px; display: flex; align-items: center; }
+.gap::before { content: ""; flex: 1; border-top: 1px dashed #2c313a; }
+.lbl { font-size: 11px; color: #5a606b; padding: 0 8px; letter-spacing: .04em; }
+"""
+
+PREVIEW_JS = """
+const zooms = [1, 2, 4, 6, 8];
+let z = 4;
+function apply() {
+  document.querySelectorAll('.strip').forEach(el => {
+    const half = el.dataset.half | 0;
+    el.style.width  = (192 * z) + 'px';
+    el.style.height = (12 * z) + 'px';
+    el.style.backgroundSize = (192 * z) + 'px ' + (24 * z) + 'px';
+    el.style.backgroundPosition = '0 ' + (-half * 12 * z) + 'px';
+  });
+  document.querySelectorAll('[data-z]').forEach(b =>
+    b.setAttribute('aria-pressed', (+b.dataset.z === z) + ''));
+}
+document.querySelectorAll('[data-z]').forEach(b =>
+  b.onclick = () => { z = +b.dataset.z; apply(); });
+apply();
+"""
+
+
+def preview_html(patterns_b64):
+    rows = []
+    for i, (name, note, b64, t0, t1) in enumerate(patterns_b64):
+        url = f"url(data:image/png;base64,{b64})"
+        rows.append(f"""<div class="pat">
+  <div class="hd"><span class="nm">{i+1}. {name}</span>
+    <span class="tm">{t0}–{t1}s</span><span class="q">{note}</span></div>
+  <div class="wall">
+    <div class="strip" data-half="0" style="background-image:{url}"></div>
+    <div class="gap"><span class="lbl">rows 0–11 above · corridor · rows 12–23 below</span></div>
+    <div class="strip" data-half="1" style="background-image:{url}"></div>
+  </div>
+</div>""")
+    btns = "".join(f'<button data-z="{n}">{n}x</button>' for n in [1, 2, 4, 6, 8])
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stargate spike — test patterns</title>
+<style>{PREVIEW_CSS}</style></head><body>
+<h1>Stargate spike — test patterns</h1>
+<p class="sub">The 9 patterns as they map to the wall: two 192×12 strips on opposite
+sides of the corridor. Nearest-neighbour, whole-number zoom only.</p>
+<div class="bar"><span>zoom</span>{btns}</div>
+{"".join(rows)}
+<script>{PREVIEW_JS}</script>
+</body></html>"""
+
+
 def main():
     frames = OUT / "frames"
     frames.mkdir(parents=True, exist_ok=True)
@@ -229,6 +317,18 @@ def main():
     p = OUT / "Stargate Test (relative path).sho"
     p.write_bytes(sho(0, total_ms, animdir="frames"))
     print(f"wrote {p.name}")
+
+    # Self-contained preview: the 9 distinct frames inlined as data URIs.
+    import base64, io
+    rows = []
+    for i, (name, fn) in enumerate(PATTERNS):
+        buf = io.BytesIO()
+        fn().save(buf, format="PNG")
+        rows.append((name, NOTES[name], base64.b64encode(buf.getvalue()).decode(),
+                     i * HOLD, (i + 1) * HOLD))
+    p = OUT / "preview.html"
+    p.write_text(preview_html(rows), encoding="utf-8")
+    print(f"wrote {p.name} ({p.stat().st_size / 1024:.1f} KB, self-contained)")
 
     print(f"\n{n} frames, {total_ms} ms, {FPS} fps")
     print(f"animationdir: {ANIMDIR}")
