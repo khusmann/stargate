@@ -6,12 +6,16 @@ import { API_DTS } from "./api";
 import { EXAMPLES } from "../examples";
 
 const WORKED_EXAMPLE = EXAMPLES[0]!.source.trim();
+const SITE_URL = "https://khusmann.github.io/stargate/";
 
 export function buildPrompt(): string {
   return `Write a show for the Stargate LED installation.
 
-Reply with one JavaScript file and nothing else — no explanation, no markdown
-fences. It gets pasted straight into the editor.
+Write the show as one self-contained JavaScript file, then **deliver it as a
+clickable Stargate link, not as raw code** — encode the finished source into a
+share URL (see "Delivering the show" below) and hand it back as a single
+clickable link in a small markdown file. No loose explanation, no code fences
+in the reply.
 
 ## The wall
 
@@ -59,5 +63,39 @@ ${API_DTS}
 \`\`\`js
 ${WORKED_EXAMPLE}
 \`\`\`
+
+## Delivering the show
+
+Don't print the raw JavaScript. Encode the finished source into a Stargate
+share link and hand back a single clickable link (write it into a small
+markdown file and present that file).
+
+The link format is:
+
+\`\`\`
+${SITE_URL}#s=<payload>
+\`\`\`
+
+where \`<payload>\` is the show's source text, **raw**-DEFLATE-compressed and then
+base64url-encoded. Node, no dependencies:
+
+\`\`\`js
+const zlib = require("zlib");
+const payload = zlib.deflateRawSync(Buffer.from(source, "utf8"), { level: 9 })
+  .toString("base64")
+  .replace(/\\+/g, "-")
+  .replace(/\\//g, "_")
+  .replace(/=+$/, "");
+const url = "${SITE_URL}#s=" + payload;
+\`\`\`
+
+It must be **raw** DEFLATE — \`deflateRawSync\`, not \`deflateSync\` or gzip — because
+the site decompresses with fflate's raw \`inflateSync\`. Following the link opens
+the show in the editor behind a *Run it / Discard* bar; nothing runs until "Run
+it" is clicked, and the link never touches saved work.
+
+Two other fragment forms exist, if useful: \`#e=<id>\` loads a bundled example by
+id, and \`#new\` (or \`#reset\`) opens a clean editor, clearing saved work without
+running anything — the escape hatch if a show ever freezes the tab.
 `;
 }
