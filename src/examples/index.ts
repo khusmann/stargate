@@ -694,6 +694,146 @@ export function pixel(x, y, t) {
 }
 `;
 
+const lightspeedJump = `export const name = "Lightspeed Jump", fps = 30, seconds = 10;
+
+// ---- seamless-loop math ------------------------------------------------
+// True radial zoom out of dead centre (x=96). Every star lives on a ray
+// through the centre and its LOG-radius scrolls outward:
+//     rho(p) = Rmin * exp(p * LN_F),   p = frac(q_i + trav(t))
+// Because the radii tile log-space and wrap by exactly one octave-lap,
+// the whole field is invariant under the per-lap zoom: the last frame is
+// identical to the first. Speed swells from a drift into a light-speed
+// blaze and eases back, all from periodic terms so nothing drifts:
+//     rate(t) = R0 + R1*(1 - cos(W t))
+//     trav(t) = R0*t + R1*(t - sin(W t)/W)
+// trav(seconds) = (R0+R1)*seconds must be a whole number of laps -> loops.
+const W = (Math.PI * 2) / seconds;
+const R0 = 0.15, R1 = 0.45;          // (R0+R1)*seconds = 6 laps -> closes
+const STREAK_SEC = 0.16;             // motion-blur window (grows with speed)
+
+// ---- centre + anisotropic projection -----------------------------------
+// Conceptual zoom happens in a square; it's squashed to the 16:1 strip so
+// KX/KY = 16. A star reaches the edge at the same rho whichever way it
+// points, so it's a genuine uniform radial burst, just aspect-corrected.
+const CX = 96;                       // dead centre of the long axis
+const KX = 64, KY = 4;               // rho=1.5 lands on the frame edge
+const Rmin = 0.02, LN_F = 5.0;       // rho spans 0.02 .. ~2.97 per lap
+
+const N = 85;                        // stars per wall
+const COUNT = N * 2;
+
+// ---- deterministic star data (seeded, so edits don't re-roll) ----------
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let x = Math.imul(a ^ (a >>> 15), 1 | a);
+    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const rnd = mulberry32(0x7A11B0);
+
+const q = new Float32Array(COUNT);       // log-radius phase offset
+const ox = new Float32Array(COUNT);      // ray direction x
+const oy = new Float32Array(COUNT);      // ray direction y
+const mag = new Float32Array(COUNT);     // per-star brightness
+const cY = new Float32Array(COUNT);      // strip centre row (6 or 18)
+const yTop = new Int32Array(COUNT);
+const yBot = new Int32Array(COUNT);
+const col = new Array(COUNT);
+
+for (let i = 0; i < COUNT; i++) {
+  const wallB = i >= N;
+  q[i] = rnd();
+  const ang = rnd() * Math.PI * 2;
+  ox[i] = Math.cos(ang);
+  oy[i] = Math.sin(ang);
+  mag[i] = 0.55 + 0.45 * rnd();
+  const yc = wallB ? 18 : 6;
+  cY[i] = yc;
+  yTop[i] = yc - 6;                       // wall A -> 0..11, wall B -> 12..23
+  yBot[i] = yc + 5;
+  const tint = rnd() * 2 - 1;             // cool blue .. warm white
+  let r = Math.round(190 + tint * 55); if (r < 0) r = 0; if (r > 255) r = 255;
+  let g = Math.round(212 + tint * 20); if (g < 0) g = 0; if (g > 255) g = 255;
+  col[i] = "rgb(" + r + "," + g + ",255)";
+}
+
+function trav(t) { return R0 * t + R1 * (t - Math.sin(W * t) / W); }
+
+// ---- background: dark space + a central jump-bloom ----------------------
+// Continuous, so it lives in pixel. Space is near-black; a soft elliptical
+// core sits at the centre and blooms at the peak of the jump. Lightness
+// stays low almost everywhere so the wall never runs at full power.
+export function pixel(x, y, t) {
+  const surge = (1 - Math.cos(W * t)) * 0.5;   // 0 at loop ends, 1 mid-jump
+  const dx = (x - CX) / 58;
+  const dy = ((y % 12) - 6) / 6;
+  const core = Math.exp(-(dx * dx + dy * dy));  // elliptical centre glow
+  const s3 = surge * surge * surge;
+  let L = 0.012
+        + (0.028 + 0.032 * surge) * core
+        + 0.34 * s3 * core;                     // bloom you jump into
+  if (L > 0.4) L = 0.4;
+  return hsl(232 - 22 * surge, 0.78 - 0.5 * surge * core, L);
+}
+
+// ---- streaks: hard-edged rays, so they live in draw --------------------
+export function draw(ctx, t) {
+  const tv = trav(t);
+  const rate = R0 + R1 * (1 - Math.cos(W * t));
+  const surge = (1 - Math.cos(W * t)) * 0.5;
+  const dP = rate * STREAK_SEC;                 // log-radius covered by the tail
+  const jumpB = 0.75 + 0.55 * surge;
+
+  for (let i = 0; i < COUNT; i++) {
+    let pH = q[i] + tv; pH -= Math.floor(pH);   // head phase, 0..1
+    let pT = pH - dP; if (pT < 0) pT = 0;        // tail nearer the centre
+
+    const rH = Rmin * Math.exp(pH * LN_F);
+    const rT = Rmin * Math.exp(pT * LN_F);
+    const dirx = ox[i], diry = oy[i], yc = cY[i];
+    const xH = CX + dirx * rH * KX, yH = yc + diry * rH * KY;
+    const xT = CX + dirx * rT * KX, yT = yc + diry * rT * KY;
+
+    let fin = pH / 0.08; if (fin > 1) fin = 1;   // fade up out of the centre
+    let fout = (1 - pH) / 0.06; if (fout > 1) fout = 1; if (fout < 0) fout = 0;
+    let bright = pH / 0.7; if (bright > 1) bright = 1;
+    let L = fin * fout * mag[i] * (0.22 + 0.78 * bright) * jumpB;
+    if (L > 1) L = 1;
+    if (L <= 0.012) continue;
+
+    const top = yTop[i], bot = yBot[i];
+    ctx.fillStyle = col[i];
+
+    const ddx = xH - xT, ddy = yH - yT;
+    let steps = Math.ceil(Math.abs(ddx) > Math.abs(ddy) ? Math.abs(ddx) : Math.abs(ddy));
+    if (steps < 1) steps = 1; else if (steps > 200) steps = 200;
+
+    for (let s = 0; s <= steps; s++) {
+      const f = s / steps;                       // 0 dim tail -> 1 bright head
+      const px = xT + ddx * f;
+      if (px < 0 || px >= 192) continue;
+      const iy = Math.floor(yT + ddy * f);
+      if (iy < top || iy > bot) continue;
+      let a = L * (0.08 + 0.92 * f * f);
+      ctx.globalAlpha = a > 1 ? 1 : a;
+      ctx.fillRect(px | 0, iy, 1, 1);
+    }
+
+    // hot head with a little vertical bloom
+    const hx = xH | 0, hy = Math.floor(yH);
+    if (hx >= 0 && hx < 192 && hy >= top && hy <= bot) {
+      ctx.globalAlpha = L;
+      ctx.fillRect(hx, hy, 1, 1);
+      if (hy - 1 >= top) { ctx.globalAlpha = L * 0.3; ctx.fillRect(hx, hy - 1, 1, 1); }
+      if (hy + 1 <= bot) { ctx.globalAlpha = L * 0.3; ctx.fillRect(hx, hy + 1, 1, 1); }
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+`;
+
 const domainWarp = `export const name = "Domain Warp", fps = 30, seconds = 28;
 
 // Inigo Quilez's domain warping:
@@ -1567,6 +1707,12 @@ export const EXAMPLES: Example[] = [
     name: "Ion Tunnel",
     blurb: "Raymarched neon rings, accumulating emission instead of hitting surfaces.",
     source: ionTunnel,
+  },
+  {
+    id: "lightspeed-jump",
+    name: "Lightspeed Jump",
+    blurb: "Radial starburst out of dead centre, log-radius zoom easing into a light-speed blaze.",
+    source: lightspeedJump,
   },
   {
     id: "domain-warp",
